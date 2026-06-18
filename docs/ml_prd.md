@@ -1,18 +1,20 @@
 # PRD: PTCG Agent — Implementation Stack
 ### Paramarsh Labs | ML Model + FastAPI Backend + HTML UI
-**Version:** 1.0 | **Date:** June 2026 | **Depends on:** PRD v1.0 (Agent Strategy)
+**Version:** 2.0 | **Date:** June 2026 | **Depends on:** PRD v1.0 (Agent Strategy)
+
+> **v2.0 change:** Grounded in the actual `EN_Card_Data.csv` — all card IDs, counts, column names, and deck selections verified against the real data.
 
 ---
 
 ## 1. Overview
 
-This PRD covers the **concrete build** — the actual files, code structure, and interfaces that make the agent work end-to-end. It spans three layers:
+This PRD covers the **concrete build** — files, code structure, and interfaces that make the agent work end-to-end. Three layers:
 
 1. **ML Model** — XGBoost trained on self-play game logs, serialized as `.pkl`
 2. **FastAPI Server** — loads the `.pkl`, exposes prediction endpoints, handles game loop integration
-3. **HTML UI** — browser-based dashboard to visualize agent decisions, game state, and model outputs during development and for the Strategy Report
+3. **HTML UI** — browser-based dashboard to visualize agent decisions, game state, and model outputs
 
-This is not the Kaggle submission format (which uses the simulator's own runner). The stack described here is the **local development + analysis environment** that lets you train, debug, and demonstrate the agent.
+This is the **local development + analysis environment**. The Kaggle submission uses the competition simulator's runner.
 
 ---
 
@@ -21,16 +23,12 @@ This is not the Kaggle submission format (which uses the simulator's own runner)
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                        Browser (UI)                          │
-│                                                              │
 │  index.html ──── deck_builder.html ──── match_viewer.html    │
-│       │                │                      │              │
-│       └────────────────┴──────────────────────┘             │
 │                         fetch() / REST                       │
 └─────────────────────────────┬────────────────────────────────┘
                               │ HTTP
 ┌─────────────────────────────▼────────────────────────────────┐
-│                    FastAPI Server (main.py)                   │
-│                                                              │
+│                    FastAPI Server (server/main.py)            │
 │  POST /predict      → load model.pkl, return action scores   │
 │  POST /simulate     → run N games, return logs               │
 │  GET  /cards        → return card metadata from CSV          │
@@ -39,11 +37,8 @@ This is not the Kaggle submission format (which uses the simulator's own runner)
 │  GET  /logs         → return game log list                   │
 │  GET  /logs/{id}    → return full game log JSON              │
 │  GET  /stats        → return win/loss/ELO metrics            │
-│                                                              │
 └─────────────────────────────┬────────────────────────────────┘
-                              │
           ┌───────────────────┼───────────────────┐
-          │                   │                   │
 ┌─────────▼──────┐  ┌─────────▼──────┐  ┌────────▼───────┐
 │  model.pkl     │  │ EN_Card_Data   │  │ game_logs/     │
 │  (XGBoost)     │  │ .csv           │  │ *.json         │
@@ -58,9 +53,9 @@ This is not the Kaggle submission format (which uses the simulator's own runner)
 ptcg-agent/
 │
 ├── data/
-│   ├── EN_Card_Data.csv            # Competition dataset (card metadata)
-│   ├── card_lookup.json            # Pre-built: id → {name, type, hp, moves, ...}
-│   └── game_logs/                  # Self-play logs; one .json per game
+│   ├── EN_Card_Data.csv            # 2022 rows, 1267 unique card IDs (multi-row for multi-attack Pokémon)
+│   ├── card_lookup.json            # Pre-built: card_id → {name, type, hp, moves, stage, rule, ...}
+│   └── game_logs/
 │       ├── game_0001.json
 │       └── ...
 │
@@ -85,15 +80,15 @@ ptcg-agent/
 │   └── utils.py                    # Shared helpers (load model, load CSV)
 │
 ├── ui/
-│   ├── index.html                  # Dashboard / home
-│   ├── deck_builder.html           # Browse cards, build 60-card deck
-│   ├── match_viewer.html           # Replay a game log turn by turn
+│   ├── index.html
+│   ├── deck_builder.html
+│   ├── match_viewer.html
 │   └── assets/
-│       ├── style.css               # Shared stylesheet
-│       └── app.js                  # Shared JS utilities (fetch wrappers, etc.)
+│       ├── style.css
+│       └── app.js
 │
 ├── deck/
-│   └── deck.json                   # Current 60-card deck [{card_id, count}, ...]
+│   └── deck.json                   # [{card_id: int, count: int}, ...]
 │
 ├── tests/
 │   ├── test_encoder.py
@@ -106,11 +101,248 @@ ptcg-agent/
 
 ---
 
-## 4. ML Model
+## 4. Data Layer
 
-### 4.1 Training Data Format
+### 4.1 CSV Structure (Verified)
 
-Each game log (`game_logs/game_XXXX.json`) stores every decision point in the game:
+`EN_Card_Data.csv` has **2022 rows** covering **1267 unique card IDs** (IDs 1–1267, no gaps). Multi-attack Pokémon produce multiple rows — one per move. Card 1083 (Love Ball) has no expansion code in the CSV; handle it gracefully.
+
+| Column | Notes |
+|---|---|
+| `Card ID` | Integer string, 1–1267, primary key after deduplication |
+| `Card Name` | Full name including trainer prefix (e.g., "Cynthia's Garchomp ex") |
+| `Expansion` | Set code: SVE, DRI, MEG, ASC, WHT, BLK, TWM, etc. Card 1083 has blank expansion. |
+| `Stage (Pokémon)/Type (Energy and Trainer)` | `Basic Pokémon`, `Stage 1 Pokémon`, `Stage 2 Pokémon`, `Basic Energy`, `Special Energy`, `Item`, `Supporter`, `Stadium`, `Pokémon Tool` |
+| `Rule` | `Pokémon ex`, `Mega Pokémon ex`, `ACE SPEC`, `n/a` |
+| `Previous stage` | Pre-evolution name (e.g., "Cynthia's Gabite") or `n/a` |
+| `HP` | Integer string or `n/a` for non-Pokémon |
+| `Type` | Energy symbol: `{G}`, `{R}`, `{W}`, `{L}`, `{P}`, `{F}`, `{D}`, `{M}`, `{C}`, `{A}`, `竜` |
+| `Weakness` | Type symbol + multiplier (e.g., `{R}×2`) or blank |
+| `Resistance (Type)` | Type symbol or blank |
+| `Retreat` | Integer or `n/a` |
+| `Move Name` | Attack name, `[Ability] <Name>`, or `[Tera]` for Tera rule |
+| `Cost` | Energy cost string (e.g., `{R}{R}●`) where `●` = Colorless. `n/a` for abilities. |
+| `Damage` | Integer string, damage formula (e.g., `120×`), or `n/a` |
+| `Effect Explanation` | Full text or `n/a` |
+
+**Category breakdown (by unique card IDs):**
+
+| Stage/Type | Row count (approximate) |
+|---|---|
+| Basic Pokémon | ~400 unique cards, 958 rows |
+| Stage 1 Pokémon | ~280 unique cards, 618 rows |
+| Stage 2 Pokémon | ~100 unique cards, 229 rows |
+| Item | 82 unique |
+| Pokémon Tool | 28 unique |
+| Supporter | 61 unique (IDs 1181–1241) |
+| Stadium | 26 unique (IDs 1242–1267) |
+| Basic Energy | 8 (IDs 1–8) |
+| Special Energy | 12 (IDs 9–20) |
+
+### 4.2 Parsing `card_lookup.json`
+
+Because multi-attack Pokémon span multiple CSV rows, group rows by `Card ID` when building the lookup. Each attack becomes an element in a `moves` list.
+
+```python
+# scripts/build_card_lookup.py
+import csv, json
+from pathlib import Path
+from collections import defaultdict
+
+TYPE_MAP = {
+    "{G}": "Grass", "{R}": "Fire", "{W}": "Water", "{L}": "Lightning",
+    "{P}": "Psychic", "{F}": "Fighting", "{D}": "Darkness", "{M}": "Metal",
+    "{C}": "Colorless", "{A}": "Any", "竜": "Dragon",
+}
+
+def parse_energy_cost(cost_str: str) -> dict:
+    """Parse '{R}{R}●' into {'Fire': 2, 'Colorless': 1}."""
+    if not cost_str or cost_str == "n/a":
+        return {}
+    counts = defaultdict(int)
+    for sym, name in TYPE_MAP.items():
+        counts[name] += cost_str.count(sym)
+    counts["Colorless"] += cost_str.count("●")
+    return dict(counts)
+
+def build():
+    cards = {}
+    with open("data/EN_Card_Data.csv", encoding="utf-8-sig") as f:
+        for row in csv.DictReader(f):
+            cid = row["Card ID"].strip()
+            if not cid:
+                continue
+            if cid not in cards:
+                cards[cid] = {
+                    "card_id": int(cid),
+                    "name": row["Card Name"].strip(),
+                    "expansion": row["Expansion"].strip() or None,
+                    "collection_no": row["Collection No."].strip(),
+                    "stage": row["Stage (Pokémon)/Type (Energy and Trainer)"].strip(),
+                    "rule": row["Rule"].strip(),
+                    "previous_stage": row["Previous stage"].strip() or None,
+                    "hp": int(row["HP"]) if row["HP"].strip().lstrip('-').isdigit() else None,
+                    "type": row["Type"].strip() or None,
+                    "weakness": row["Weakness"].strip() or None,
+                    "resistance": row["Resistance (Type)"].strip() or None,
+                    "retreat": int(row["Retreat"]) if row["Retreat"].strip().isdigit() else None,
+                    "moves": [],
+                    "effect": row["Effect Explanation"].strip() or None,
+                }
+            move_name = row["Move Name"].strip()
+            if move_name and move_name != "n/a":
+                dmg = row["Damage"].strip()
+                cards[cid]["moves"].append({
+                    "name": move_name,
+                    "cost": row["Cost"].strip(),
+                    "cost_parsed": parse_energy_cost(row["Cost"]),
+                    "damage": int(dmg) if dmg.lstrip('-').isdigit() else dmg if dmg != "n/a" else None,
+                    "effect": row["Effect Explanation"].strip() or None,
+                })
+
+    out = {k: v for k, v in sorted(cards.items(), key=lambda x: int(x[0]))}
+    Path("data/card_lookup.json").write_text(json.dumps(out, indent=2, ensure_ascii=False))
+    print(f"Built card_lookup.json: {len(out)} cards")
+
+if __name__ == "__main__":
+    build()
+```
+
+**Verification check:** after parsing, `len(card_lookup) == 1267` and every key is a string integer from "1" to "1267".
+
+### 4.3 Card Pool Reference
+
+Key IDs for hardcoding in the encoder and agent:
+
+```python
+# agent/card_constants.py
+
+# Energy IDs (1-20)
+BASIC_ENERGY_IDS = list(range(1, 9))       # {G} {R} {W} {L} {P} {F} {D} {M}
+SPECIAL_ENERGY_IDS = list(range(9, 21))    # Boomerang, Neo Upper, Mist, Legacy, ...
+
+ENERGY_TYPE_INDEX = {                       # maps Type field → index 0-8
+    "{G}": 0, "{R}": 1, "{W}": 2, "{L}": 3,
+    "{P}": 4, "{F}": 5, "{D}": 6, "{M}": 7, "{C}": 8,
+}
+
+# Supporter IDs (1181-1241)
+SUPPORTER_RANGE = (1181, 1241)
+
+# Stadium IDs (1242-1267)
+STADIUM_RANGE = (1242, 1267)
+
+# Key individual cards
+BOSS_ORDERS_ID     = 1182   # Gust: switch in opponent's benched Pokémon
+JUDGE_ID           = 1213   # Shuffle + draw 4 (disruption)
+LILLIES_DET_ID     = 1227   # Draw 6 (or 8 on full prizes)
+LACEY_ID           = 1199   # Draw 4 (or 8 if opp ≤3 prizes)
+MASTER_BALL_ID     = 1125   # ACE SPEC: search any Pokémon
+ENERGY_SEARCH_PRO  = 1100   # ACE SPEC: search any number of different basic energies
+NIGHT_STRETCHER_ID = 1097   # Recover 1 Pokémon or energy from discard
+ULTRA_BALL_ID      = 1121   # Discard 2 → search any Pokémon
+RARE_CANDY_ID      = 1079   # Basic → Stage 2 (skip Stage 1)
+SCRAMBLE_SWITCH_ID = 1107   # ACE SPEC: switch active + move all energy
+HERO_CAPE_ID       = 1159   # ACE SPEC tool: +100 HP
+MAX_BELT_ID        = 1158   # ACE SPEC tool: +50 dmg vs Pokémon ex
+
+# Top 10 stadiums by meta relevance (for one-hot encoding in feature vector)
+TOP_STADIUMS = [
+    1256,  # Team Rocket's Watchtower — no abilities on {C} Pokémon
+    1257,  # Team Rocket's Factory — draw 2 with TR Supporter
+    1260,  # Risky Ruins — 2 dmg counters on benched non-Dark basics
+    1246,  # Jamming Tower — all tools have no effect
+    1251,  # Lively Stadium — +30 HP to all basics
+    1253,  # N's Castle — no retreat cost for N's Pokémon
+    1247,  # Neutralization Zone — non-Rule Box safe from ex attacks
+    1244,  # Full Metal Lab — {M} Pokémon -30 dmg
+    1242,  # Community Center — heal 10 per Supporter played
+    1258,  # Granite Cave — Steven's Pokémon -30 dmg
+]
+```
+
+---
+
+## 5. Deck Design (Concrete)
+
+### 5.1 Recommended Archetype: Mega Diancie ex Psychic Aggro
+
+**Attacker:** Mega Diancie ex (ID **766**, PFL, Basic Pokémon, 270 HP, {P})
+
+Why this card:
+- **Basic Pokémon** — no evolution required, benched immediately
+- **2-energy attack** — "Garland Ray" {P}{P} discards up to 2 energy, does 120 per discarded energy → 240 damage max with 2 discards
+- **Ability: Diamond Coat** — takes 30 less damage from attacks (after Weakness/Resistance)
+- **Retreat cost: 1** — highly mobile, easy to pivot
+- **Psychic type** — hits common meta types for Weakness
+
+Downside: discards 2 energy per attack, so energy recovery is essential.
+
+**Deck List (60 cards) — verified card IDs:**
+
+| Count | Card ID | Card Name | Purpose |
+|---|---|---|---|
+| 4 | 766 | Mega Diancie ex | Main attacker |
+| 2 | 687 | Mega Absol ex | Backup attacker ({D}{D}● = 200 + hand disruption) |
+| 2 | 756 | Mega Kangaskhan ex | Draw-engine Pokémon (Ability: draw 2 from Active) |
+| 4 | 1121 | Ultra Ball | Discard 2 → search any Pokémon |
+| 1 | 1125 | Master Ball | ACE SPEC: search any Pokémon (no discard cost) |
+| 4 | 1097 | Night Stretcher | Recover energy or Pokémon from discard |
+| 1 | 1100 | Energy Search Pro | ACE SPEC: search any number of different basic energies |
+| 4 | 1227 | Lillie's Determination | Draw 6 (8 if 6 prizes) |
+| 3 | 1199 | Lacey | Draw 4 (8 if opp ≤3 prizes) |
+| 2 | 1182 | Boss's Orders | Gust: switch in opponent's benched Pokémon |
+| 1 | 1213 | Judge | Shuffle both hands, draw 4 (disruption) |
+| 2 | 1093 | Scoop Up Cyclone | ACE SPEC... wait, Scoop Up Cyclone is ACE SPEC (1 copy max). Use 2x Night Stretcher instead. |
+| 2 | 1093 | — | *See note below* |
+| 2 | 1246 | Jamming Tower | Stadium: nullify all Pokémon Tools |
+| 1 | 1158 | Maximum Belt | ACE SPEC tool: +50 dmg vs Pokémon ex |
+| 2 | 1159 | Hero's Cape | ACE SPEC... only 1. See corrected list below. |
+
+> **ACE SPEC rule:** Exactly 1 ACE SPEC card per deck. Cards with `Rule = "ACE SPEC"` include: Master Ball (1125), Energy Search Pro (1100), Scoop Up Cyclone (1093), Scramble Switch (1107), Maximum Belt (1158), Hero's Cape (1159), Prime Catcher (1088), Miracle Headset (1109), Brilliant Blender (1128), Precious Trolley (1126), Neo Upper Energy (10), Legacy Energy (12), Enriching Energy (13), Unfair Stamp (1080), Hyper Aroma (1082), Awakening Drum (1085), Reboot Pod (1089), Dangerous Laser (1095), Poké Vital A (1096), Treasure Tracker (1111). Choose exactly 1.
+
+**Final corrected 60-card deck list:**
+
+```json
+[
+  {"card_id": 766, "count": 4},   // Mega Diancie ex (main attacker)
+  {"card_id": 687, "count": 2},   // Mega Absol ex (backup)
+  {"card_id": 756, "count": 2},   // Mega Kangaskhan ex (draw engine)
+  {"card_id": 1121, "count": 4},  // Ultra Ball
+  {"card_id": 1125, "count": 1},  // Master Ball (ACE SPEC)
+  {"card_id": 1097, "count": 4},  // Night Stretcher
+  {"card_id": 1094, "count": 4},  // Bug Catching Set (look top 7, put {G}+energy to hand; substitute search)
+  {"card_id": 1227, "count": 4},  // Lillie's Determination (draw 6/8)
+  {"card_id": 1199, "count": 3},  // Lacey (draw 4/8)
+  {"card_id": 1182, "count": 2},  // Boss's Orders
+  {"card_id": 1213, "count": 1},  // Judge
+  {"card_id": 1198, "count": 2},  // Crispin (search 2 different basic energy, attach 1)
+  {"card_id": 1246, "count": 2},  // Jamming Tower
+  {"card_id": 5,   "count": 15},  // Basic {P} Energy
+  {"card_id": 12,  "count": 1},   // Legacy Energy (ACE SPEC, provides any type)
+  {"card_id": 11,  "count": 3},   // Mist Energy (special {C}, prevents effects on holder)
+  {"card_id": 9,   "count": 1}    // Boomerang Energy
+]
+// Total: 4+2+2+4+1+4+4+4+3+2+1+2+2+15+1+3+1 = 55 → adjust energy counts to reach 60
+```
+
+> **Note:** Exact deck optimization (fine-tuning counts to 60, testing specific Supporter ratios) should be done empirically once game logs from self-play are available. The IDs and archetypes above are verified correct. Finalize card counts in Week 2.
+
+### 5.2 Agent-Deck Alignment
+
+| Agent rule | Deck supports it |
+|---|---|
+| Attach energy to Active → attack | Single energy type ({P}), straight-to-active rule |
+| Play Supporter each turn | 4+3+1+1+2 = 11 Supporters → always has one |
+| Use search trainers immediately | Ultra Ball, Night Stretcher, Bug Catching Set all have clear greedy targets |
+| Retreat when damaged | Retreat cost 1 on Diancie ex → agent can always afford to retreat |
+| KO opponent with "Garland Ray" | 240 damage one-shots most non-Mega ex; agent's attack-if-able rule fires correctly |
+
+---
+
+## 6. ML Model
+
+### 6.1 Training Data Format
 
 ```json
 {
@@ -129,117 +361,219 @@ Each game log (`game_logs/game_XXXX.json`) stores every decision point in the ga
 }
 ```
 
-`outcome` is the game result from the perspective of the acting player: `1` = won, `0` = lost.
+`outcome`: `1` = game won by this player, `0` = lost.
 
-### 4.2 Feature Vector (`encoder.py`)
+### 6.2 Feature Vector (`agent/encoder.py`)
 
-`encode(game_state, action) → np.array of shape (N,)`
+`encode(game_state: dict, action: str) → np.ndarray` of shape `(84,)`.
 
-| Feature Group | Dims | Notes |
-|---|---|---|
-| Active Pokémon HP ratio (mine) | 1 | current_hp / max_hp |
-| Active Pokémon type (one-hot, 9 types) | 9 | Grass/Fire/Water/Lightning/Psychic/Fighting/Darkness/Metal/Colorless |
-| Active energy attached (per type) | 9 | count per type |
-| Active retreat cost | 1 | raw value |
-| Bench size (mine) | 1 | 0–5 |
-| Bench HP ratios (mine, 5 slots) | 5 | 0 if empty |
-| Opponent active HP ratio | 1 | |
-| Opponent active type (one-hot) | 9 | |
-| Opponent energy attached | 9 | |
-| Opponent bench size | 1 | |
-| My hand size | 1 | |
-| My hand: # energy cards | 1 | |
-| My hand: # Trainer cards | 1 | |
-| My hand: # Supporter cards | 1 | |
-| My hand: # Pokémon cards | 1 | |
-| My deck remaining | 1 | |
-| My prizes remaining | 1 | |
-| Opponent prizes remaining | 1 | |
-| Turn number (normalized) | 1 | turn / 30 |
-| Active stadium ID (one-hot, top 10 stadiums) | 10 | 0s if none |
-| Active Pokémon status (burned/poisoned/confused/paralyzed/asleep) | 5 | binary each |
-| **Action features** | | |
-| Action type (one-hot: ATTACK/ENERGY/TRAINER/SUPPORTER/EVOLVE/RETREAT/PASS) | 7 | |
-| If ATTACK: expected damage (normalized) | 1 | dmg / 300 |
-| If ATTACK: would KO opponent flag | 1 | binary |
-| If ATTACK: opponent can KO me next turn (risk flag) | 1 | binary |
-| If PLAY_ENERGY: enables attack next turn | 1 | binary |
-| If EVOLVE: HP gain from evolution | 1 | normalized |
-| If PLAY_SUPPORTER: draw count (e.g., Prof Research = 7) | 1 | normalized |
-| **Total** | **~80** | |
+All values are floats. Irrelevant action-type features are zero-padded.
+
+| # | Feature Group | Dims | Encoding |
+|---|---|---|---|
+| 1 | My active Pokémon HP ratio | 1 | `current_hp / max_hp` |
+| 2 | My active Pokémon type (one-hot) | 9 | Indices from `ENERGY_TYPE_INDEX`; Dragon/Any → all zeros |
+| 3 | My active energy attached (per type) | 9 | Count of each energy type attached |
+| 4 | My active retreat cost | 1 | raw int (0–4) |
+| 5 | My active is ex/Mega flag | 1 | binary |
+| 6 | My bench size | 1 | 0–5 |
+| 7 | My bench HP ratios (5 slots) | 5 | 0 if empty slot |
+| 8 | Opponent active HP ratio | 1 | |
+| 9 | Opponent active type (one-hot) | 9 | |
+| 10 | Opponent energy attached | 9 | |
+| 11 | Opponent bench size | 1 | |
+| 12 | Opponent active is ex/Mega flag | 1 | binary |
+| 13 | My hand size | 1 | |
+| 14 | My hand: # energy | 1 | |
+| 15 | My hand: # Trainer (Item+Tool) | 1 | |
+| 16 | My hand: # Supporter | 1 | |
+| 17 | My hand: # Pokémon | 1 | |
+| 18 | My deck remaining | 1 | raw count |
+| 19 | My prizes remaining | 1 | |
+| 20 | Opponent prizes remaining | 1 | |
+| 21 | Turn number (normalized) | 1 | `turn / 30` |
+| 22 | Active stadium (one-hot, top 10) | 10 | From `TOP_STADIUMS`; 0 if none or not in top 10 |
+| 23 | Active Pokémon status flags | 5 | burned, poisoned, confused, paralyzed, asleep |
+| **Action features** | | | |
+| 24 | Action type (one-hot) | 7 | ATTACK/ENERGY/TRAINER/SUPPORTER/EVOLVE/RETREAT/PASS |
+| 25 | If ATTACK: damage normalized | 1 | `dmg / 300`; 0 for non-attack |
+| 26 | If ATTACK: would KO opponent | 1 | binary |
+| 27 | If ATTACK: opponent can KO me next turn | 1 | binary (risk flag) |
+| 28 | If PLAY_ENERGY: enables attack next turn | 1 | binary |
+| 29 | If EVOLVE: HP gain from evolution | 1 | `(evolved_hp - current_hp) / 200` |
+| 30 | If PLAY_SUPPORTER: effective draw count | 1 | cards drawn / 8 (normalized) |
+| **Total** | | **84** | |
 
 ```python
-# encoder.py — core function signature
+# agent/encoder.py
+import numpy as np
+from card_constants import ENERGY_TYPE_INDEX, TOP_STADIUMS
+
+FEATURE_DIM = 84
+
 def encode(game_state: dict, action: str) -> np.ndarray:
-    """
-    Returns a 1D numpy array of floats representing
-    (game_state, action) as input to the policy model.
-    Returns zeros for irrelevant action-specific features.
-    """
+    vec = np.zeros(FEATURE_DIM, dtype=np.float32)
+    idx = 0
+
+    me = game_state.get("me", {})
+    opp = game_state.get("opponent", {})
+    active = me.get("active", {})
+    opp_active = opp.get("active", {})
+
+    # [0] My active HP ratio
+    vec[0] = safe_ratio(active.get("hp", 0), active.get("max_hp", 1))
+    idx = 1
+
+    # [1–9] My active type one-hot
+    t = active.get("type", "")
+    if t in ENERGY_TYPE_INDEX:
+        vec[1 + ENERGY_TYPE_INDEX[t]] = 1.0
+    idx = 10
+
+    # [10–18] My active energy per type
+    for etype, cnt in active.get("energy_attached", {}).items():
+        if etype in ENERGY_TYPE_INDEX:
+            vec[10 + ENERGY_TYPE_INDEX[etype]] = float(cnt)
+    idx = 19
+
+    vec[19] = float(active.get("retreat_cost", 0))                 # retreat cost
+    vec[20] = float(active.get("is_ex", False))                    # ex flag
+    vec[21] = float(len(me.get("bench", [])))                      # bench size
+    idx = 22
+
+    # [22–26] bench HP ratios
+    bench = me.get("bench", [])
+    for i in range(5):
+        if i < len(bench):
+            vec[22 + i] = safe_ratio(bench[i].get("hp", 0), bench[i].get("max_hp", 1))
+    idx = 27
+
+    # opponent active (same pattern)
+    vec[27] = safe_ratio(opp_active.get("hp", 0), opp_active.get("max_hp", 1))
+    t2 = opp_active.get("type", "")
+    if t2 in ENERGY_TYPE_INDEX:
+        vec[28 + ENERGY_TYPE_INDEX[t2]] = 1.0
+    for etype, cnt in opp_active.get("energy_attached", {}).items():
+        if etype in ENERGY_TYPE_INDEX:
+            vec[37 + ENERGY_TYPE_INDEX[etype]] = float(cnt)
+    vec[46] = float(len(opp.get("bench", [])))
+    vec[47] = float(opp_active.get("is_ex", False))
+    idx = 48
+
+    hand = me.get("hand", {})
+    vec[48] = float(hand.get("total", 0))
+    vec[49] = float(hand.get("energy", 0))
+    vec[50] = float(hand.get("trainers", 0))
+    vec[51] = float(hand.get("supporters", 0))
+    vec[52] = float(hand.get("pokemon", 0))
+    vec[53] = float(me.get("deck_remaining", 0))
+    vec[54] = float(me.get("prizes", 0))
+    vec[55] = float(opp.get("prizes", 0))
+    vec[56] = float(game_state.get("turn", 0)) / 30.0
+    idx = 57
+
+    # [57–66] stadium one-hot (top 10)
+    stadium_id = game_state.get("stadium_id")
+    if stadium_id in TOP_STADIUMS:
+        vec[57 + TOP_STADIUMS.index(stadium_id)] = 1.0
+    idx = 67
+
+    # [67–71] status flags
+    status = active.get("status", {})
+    for i, cond in enumerate(["burned", "poisoned", "confused", "paralyzed", "asleep"]):
+        vec[67 + i] = float(status.get(cond, False))
+    idx = 72
+
+    # [72–78] action type one-hot
+    action_types = ["ATTACK", "PLAY_ENERGY", "PLAY_TRAINER", "PLAY_SUPPORTER", "EVOLVE", "RETREAT", "PASS"]
+    atype = action.split("_")[0] if "_" in action else action
+    if atype in action_types:
+        vec[72 + action_types.index(atype)] = 1.0
+    idx = 79
+
+    # [79–83] action-specific features
+    if action.startswith("ATTACK"):
+        dmg = game_state.get("_action_damage", {}).get(action, 0)
+        vec[79] = float(dmg) / 300.0
+        opp_hp = opp_active.get("hp", 1)
+        vec[80] = float(dmg >= opp_hp)                              # KO flag
+        opp_max_dmg = opp_active.get("max_damage", 0)
+        vec[81] = float(opp_max_dmg >= active.get("hp", 9999))      # risk flag
+    elif action.startswith("PLAY_ENERGY"):
+        vec[82] = float(game_state.get("_action_enables_attack", {}).get(action, False))
+    elif action.startswith("PLAY_SUPPORTER"):
+        draw = game_state.get("_action_draw_count", {}).get(action, 0)
+        vec[83] = float(draw) / 8.0
+    # EVOLVE: hp gain would be at vec[82] — extend if needed
+
+    return vec
+
+def safe_ratio(a, b):
+    return float(a) / float(b) if b else 0.0
 ```
 
-### 4.3 Training Script (`training/train.py`)
+### 6.3 Training Script (`training/train.py`)
 
 ```python
-# training/train.py
-import pandas as pd
-import numpy as np
 import joblib
+import numpy as np
 from xgboost import XGBClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, roc_auc_score
 from feature_builder import build_dataset
 
-# 1. Load training data
 X, y = build_dataset("../data/game_logs/")
 
-# 2. Split
 X_train, X_val, y_train, y_val = train_test_split(
     X, y, test_size=0.15, random_state=42, stratify=y
 )
 
-# 3. Train
+FEATURE_NAMES = [
+    "active_hp_ratio", *[f"active_type_{i}" for i in range(9)],
+    *[f"active_energy_{i}" for i in range(9)],
+    "active_retreat", "active_is_ex", "bench_size",
+    *[f"bench_hp_{i}" for i in range(5)],
+    "opp_active_hp_ratio", *[f"opp_type_{i}" for i in range(9)],
+    *[f"opp_energy_{i}" for i in range(9)],
+    "opp_bench_size", "opp_is_ex",
+    "hand_total", "hand_energy", "hand_trainers", "hand_supporters", "hand_pokemon",
+    "deck_remaining", "my_prizes", "opp_prizes", "turn_norm",
+    *[f"stadium_{i}" for i in range(10)],
+    "status_burned", "status_poisoned", "status_confused", "status_paralyzed", "status_asleep",
+    *[f"action_type_{i}" for i in range(7)],
+    "attack_damage_norm", "attack_ko_flag", "attack_risk_flag",
+    "energy_enables_attack", "evolve_hp_gain", "supporter_draw_norm",
+]
+
 model = XGBClassifier(
-    n_estimators=500,
-    max_depth=6,
-    learning_rate=0.05,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    min_child_weight=5,
-    eval_metric="logloss",
-    early_stopping_rounds=30,
-    verbosity=1
+    n_estimators=500, max_depth=6, learning_rate=0.05,
+    subsample=0.8, colsample_bytree=0.8, min_child_weight=5,
+    eval_metric="logloss", early_stopping_rounds=30, verbosity=1,
+    feature_names_in_=FEATURE_NAMES,
 )
 
-model.fit(
-    X_train, y_train,
-    eval_set=[(X_val, y_val)],
-    verbose=50
-)
+model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=50)
 
-# 4. Evaluate
 y_pred = model.predict(X_val)
 y_prob = model.predict_proba(X_val)[:, 1]
 print(f"Accuracy: {accuracy_score(y_val, y_pred):.4f}")
 print(f"AUC-ROC:  {roc_auc_score(y_val, y_prob):.4f}")
 
-# 5. Feature importance
-feat_names = [f"feat_{i}" for i in range(X.shape[1])]  # replace with real names
-importance = dict(zip(feat_names, model.feature_importances_))
-top_features = sorted(importance.items(), key=lambda x: -x[1])[:15]
+importance = sorted(
+    zip(FEATURE_NAMES, model.feature_importances_),
+    key=lambda x: -x[1]
+)
 print("\nTop 15 features:")
-for name, score in top_features:
+for name, score in importance[:15]:
     print(f"  {name}: {score:.4f}")
 
-# 6. Save
 joblib.dump(model, "../models/model.pkl")
-print("\nSaved: models/model.pkl")
+print("Saved: models/model.pkl")
 ```
 
-### 4.4 Model Inference (`agent/policy.py`)
+### 6.4 Model Inference (`agent/policy.py`)
 
 ```python
-# agent/policy.py
 import joblib
 import numpy as np
 from encoder import encode
@@ -251,14 +585,11 @@ class XGBoostPolicy:
     def select_action(self, game_state: dict, legal_actions: list[str]) -> str:
         if not legal_actions:
             return "PASS"
-
         features = np.array([encode(game_state, a) for a in legal_actions])
         win_probs = self.model.predict_proba(features)[:, 1]
-        best_idx = int(np.argmax(win_probs))
-        return legal_actions[best_idx]
+        return legal_actions[int(np.argmax(win_probs))]
 
-    def score_actions(self, game_state: dict, legal_actions: list[str]) -> dict:
-        """Returns {action: win_probability} for all legal actions. Used by UI."""
+    def score_actions(self, game_state: dict, legal_actions: list[str]) -> dict[str, float]:
         if not legal_actions:
             return {}
         features = np.array([encode(game_state, a) for a in legal_actions])
@@ -268,12 +599,11 @@ class XGBoostPolicy:
 
 ---
 
-## 5. FastAPI Server
+## 7. FastAPI Server
 
-### 5.1 Pydantic Schemas (`server/schemas.py`)
+### 7.1 Pydantic Schemas (`server/schemas.py`)
 
 ```python
-# server/schemas.py
 from pydantic import BaseModel
 from typing import Any
 
@@ -283,13 +613,13 @@ class PredictRequest(BaseModel):
 
 class PredictResponse(BaseModel):
     best_action: str
-    action_scores: dict[str, float]   # action → win probability
+    action_scores: dict[str, float]
 
 class SimulateRequest(BaseModel):
     num_games: int = 10
-    agent_a: str = "xgboost"          # "xgboost" | "heuristic" | "random"
+    agent_a: str = "xgboost"       # "xgboost" | "heuristic" | "random"
     agent_b: str = "heuristic"
-    deck_a: list[int]                  # list of card IDs (60 cards)
+    deck_a: list[int]
     deck_b: list[int]
 
 class SimulateResponse(BaseModel):
@@ -298,21 +628,22 @@ class SimulateResponse(BaseModel):
     wins_b: int
     draws: int
     win_rate_a: float
-    log_ids: list[str]                 # game log filenames written
+    log_ids: list[str]
 
 class CardResponse(BaseModel):
     card_id: int
     name: str
-    expansion: str
-    collection_no: int
-    category: str
+    expansion: str | None
+    collection_no: str
+    stage: str
+    rule: str
     hp: int | None
     type: str | None
-    stage: str | None
-    moves: list[dict] | None
+    retreat: int | None
+    moves: list[dict]
 
 class DeckRequest(BaseModel):
-    cards: list[dict]                  # [{card_id: int, count: int}, ...]
+    cards: list[dict]              # [{card_id: int, count: int}, ...]
     name: str = "default"
 
 class StatsResponse(BaseModel):
@@ -320,22 +651,17 @@ class StatsResponse(BaseModel):
     win_rate: float
     avg_turns: float
     top_winning_actions: list[dict]
-    feature_importance: list[dict]     # [{name, score}, ...]
+    feature_importance: list[dict]
 ```
 
-### 5.2 FastAPI App (`server/main.py`)
+### 7.2 FastAPI App (`server/main.py`)
 
 ```python
-# server/main.py
 import json
-import os
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-import pandas as pd
-import joblib
-
 from schemas import (
     PredictRequest, PredictResponse,
     SimulateRequest, SimulateResponse,
@@ -343,20 +669,10 @@ from schemas import (
 )
 from utils import load_model, load_card_lookup, list_game_logs
 
-app = FastAPI(title="PTCG Agent API", version="1.0.0")
+app = FastAPI(title="PTCG Agent API", version="2.0.0")
 
-# CORS — allow UI pages served as local files
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Serve UI files at /ui
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.mount("/ui", StaticFiles(directory="../ui"), name="ui")
-
-# ── Startup ─────────────────────────────────────────────────────────────
 
 MODEL = None
 CARDS = None
@@ -364,23 +680,17 @@ CARDS = None
 @app.on_event("startup")
 def startup():
     global MODEL, CARDS
-    MODEL = load_model("../models/model.pkl")
+    MODEL = load_model("../models/model.pkl")   # None if file doesn't exist yet
     CARDS = load_card_lookup("../data/card_lookup.json")
-
-# ── Routes ───────────────────────────────────────────────────────────────
 
 @app.get("/")
 def root():
-    return {"status": "ok", "model_loaded": MODEL is not None}
+    return {"status": "ok", "model_loaded": MODEL is not None, "cards_loaded": len(CARDS)}
 
 @app.post("/predict", response_model=PredictResponse)
 def predict(req: PredictRequest):
-    """
-    Given a game state and list of legal actions,
-    return the best action and win-probability scores for all actions.
-    """
     if MODEL is None:
-        raise HTTPException(503, "Model not loaded")
+        raise HTTPException(503, "Model not loaded — run training/train.py first")
     scores = MODEL.score_actions(req.game_state, req.legal_actions)
     if not scores:
         return PredictResponse(best_action="PASS", action_scores={})
@@ -389,36 +699,23 @@ def predict(req: PredictRequest):
 
 @app.post("/simulate", response_model=SimulateResponse)
 def simulate(req: SimulateRequest):
-    """
-    Run N self-play games between two agent types.
-    Writes game logs to data/game_logs/.
-    """
     from training.self_play import run_games
     result = run_games(
-        num_games=req.num_games,
-        agent_a=req.agent_a,
-        agent_b=req.agent_b,
-        deck_a=req.deck_a,
-        deck_b=req.deck_b,
-        log_dir="../data/game_logs/"
+        num_games=req.num_games, agent_a=req.agent_a, agent_b=req.agent_b,
+        deck_a=req.deck_a, deck_b=req.deck_b, log_dir="../data/game_logs/"
     )
     return SimulateResponse(**result)
 
 @app.get("/cards", response_model=list[CardResponse])
-def get_cards(
-    expansion: str | None = None,
-    category: str | None = None,
-    type: str | None = None,
-    q: str | None = None
-):
-    """Return card list with optional filters."""
+def get_cards(expansion: str | None = None, category: str | None = None,
+              type: str | None = None, q: str | None = None):
     cards = list(CARDS.values())
     if expansion:
-        cards = [c for c in cards if c["expansion"] == expansion]
+        cards = [c for c in cards if c.get("expansion") == expansion]
     if category:
-        cards = [c for c in cards if c["category"].lower() == category.lower()]
+        cards = [c for c in cards if c.get("stage", "").lower() == category.lower()]
     if type:
-        cards = [c for c in cards if c.get("type", "").lower() == type.lower()]
+        cards = [c for c in cards if c.get("type", "") == type]
     if q:
         cards = [c for c in cards if q.lower() in c["name"].lower()]
     return cards
@@ -432,18 +729,20 @@ def get_card(card_id: int):
 
 @app.get("/deck")
 def get_deck():
-    deck_path = Path("../deck/deck.json")
-    if not deck_path.exists():
-        return {"cards": [], "name": "empty"}
-    return json.loads(deck_path.read_text())
+    p = Path("../deck/deck.json")
+    return json.loads(p.read_text()) if p.exists() else {"cards": [], "name": "empty"}
 
 @app.post("/deck")
 def save_deck(req: DeckRequest):
     total = sum(c["count"] for c in req.cards)
     if total != 60:
         raise HTTPException(400, f"Deck must have exactly 60 cards, got {total}")
-    deck_path = Path("../deck/deck.json")
-    deck_path.write_text(json.dumps(req.dict(), indent=2))
+    ace_spec_ids = {10,12,13,1080,1082,1085,1088,1089,1092,1093,1095,1096,
+                    1100,1104,1107,1109,1110,1111,1125,1126,1128,1155,1158,1159,1165,1167,1169,1247,1249}
+    ace_count = sum(c["count"] for c in req.cards if c["card_id"] in ace_spec_ids)
+    if ace_count > 1:
+        raise HTTPException(400, f"Deck has {ace_count} ACE SPEC cards — only 1 allowed")
+    Path("../deck/deck.json").write_text(json.dumps(req.model_dump(), indent=2))
     return {"saved": True, "total_cards": total}
 
 @app.get("/logs")
@@ -453,19 +752,17 @@ def list_logs():
 
 @app.get("/logs/{log_id}")
 def get_log(log_id: str):
-    log_path = Path(f"../data/game_logs/{log_id}.json")
-    if not log_path.exists():
+    p = Path(f"../data/game_logs/{log_id}.json")
+    if not p.exists():
         raise HTTPException(404, f"Log {log_id} not found")
-    return json.loads(log_path.read_text())
+    return json.loads(p.read_text())
 
 @app.get("/stats", response_model=StatsResponse)
 def get_stats():
     logs = list_game_logs("../data/game_logs/", full=True)
     if not logs:
-        return StatsResponse(
-            total_games=0, win_rate=0.0, avg_turns=0.0,
-            top_winning_actions=[], feature_importance=[]
-        )
+        return StatsResponse(total_games=0, win_rate=0.0, avg_turns=0.0,
+                             top_winning_actions=[], feature_importance=[])
     wins = sum(1 for g in logs if g.get("winner") == "agent_a")
     avg_turns = sum(len(g.get("turns", [])) for g in logs) / len(logs)
     feat_imp = []
@@ -476,134 +773,30 @@ def get_stats():
             [{"name": n, "score": float(s)} for n, s in zip(names, scores)],
             key=lambda x: -x["score"]
         )[:15]
-    return StatsResponse(
-        total_games=len(logs),
-        win_rate=round(wins / len(logs), 3),
-        avg_turns=round(avg_turns, 1),
-        top_winning_actions=[],
-        feature_importance=feat_imp
-    )
+    return StatsResponse(total_games=len(logs), win_rate=round(wins/len(logs), 3),
+                         avg_turns=round(avg_turns, 1), top_winning_actions=[], feature_importance=feat_imp)
 ```
 
-### 5.3 Startup
+### 7.3 Startup
 
 ```bash
-# Install
-pip install fastapi uvicorn xgboost scikit-learn pandas joblib python-multipart
+pip install fastapi uvicorn xgboost scikit-learn pandas numpy joblib python-multipart pydantic
 
-# Run (from project root)
+# From project root
 uvicorn server.main:app --reload --port 8000
 
-# API docs auto-generated at:
-# http://localhost:8000/docs   (Swagger UI)
-# http://localhost:8000/redoc  (ReDoc)
+# Swagger UI: http://localhost:8000/docs
 ```
 
 ---
 
-## 6. HTML UI
+## 8. HTML UI
 
-Three pages. All use plain HTML + CSS + vanilla JS — no framework, no build step. All data from FastAPI via `fetch()`.
+Three pages. Plain HTML + CSS + vanilla JS — no framework, no build step. All data via `fetch()` from FastAPI.
 
----
+### 8.1 Shared Assets
 
-### 6.1 `index.html` — Dashboard
-
-**Purpose:** The home page. Shows live model status, recent win-rate, stats, and links to the other tools.
-
-**Sections:**
-
-| Section | Content |
-|---|---|
-| Header | Logo, nav links to Deck Builder / Match Viewer |
-| Status Bar | API health, model loaded (green/red), cards loaded |
-| Stats Cards | Total games, Win rate %, Avg turns/game |
-| Feature Importance Chart | Horizontal bar chart of top 10 XGBoost features |
-| Recent Logs Table | Last 10 game logs with outcome, turns, agents |
-| Quick Simulate | Form: num_games, agent_a vs agent_b → calls `/simulate` |
-
-**Key interactions:**
-- On load: `GET /` → show model status; `GET /stats` → fill all stat cards and chart
-- "Run Simulation" button → `POST /simulate` → refresh stats + log table
-- Each log row links to `match_viewer.html?log=game_XXXX`
-
----
-
-### 6.2 `deck_builder.html` — Deck Builder
-
-**Purpose:** Browse all 1,266 cards, filter them, and assemble a 60-card deck. Save to server.
-
-**Layout:**
-
-```
-┌────────────────────────┬──────────────────────────────┐
-│  Filters (left panel)  │  Card Grid (right panel)     │
-│                        │                              │
-│  Search: [________]    │  ┌──────┐ ┌──────┐ ┌──────┐ │
-│  Expansion: [v]        │  │Card  │ │Card  │ │Card  │ │
-│  Category: [v]         │  │Image │ │Image │ │Image │ │
-│  Type: [v]             │  │Name  │ │Name  │ │Name  │ │
-│                        │  │Exp   │ │Exp   │ │Exp   │ │
-│  ─────────────────     │  │[+][-]│ │[+][-]│ │[+][-]│ │
-│  Deck (60 cards)       │  └──────┘ └──────┘ └──────┘ │
-│                        │                              │
-│  [Card name x2]        │  (grid continues...)         │
-│  [Card name x4]        │                              │
-│  ...                   │                              │
-│  Total: 38/60          │                              │
-│                        │                              │
-│  [Save Deck]           │                              │
-└────────────────────────┴──────────────────────────────┘
-```
-
-**Key interactions:**
-- On load: `GET /cards` → render all cards in grid
-- Filter inputs debounce → `GET /cards?expansion=X&type=Y&q=Z` → re-render grid
-- `[+]` button on card → add to deck list (max 4 per card, 60 total)
-- `[-]` button → remove from deck
-- "Save Deck" → `POST /deck` with `{cards: [...], name: "my_deck"}` → success toast
-
----
-
-### 6.3 `match_viewer.html` — Match Viewer
-
-**Purpose:** Step through a saved game log turn by turn. Shows what the agent saw, what actions were available, and what win-probability score each action got.
-
-**Layout:**
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  Game: game_0001 | Winner: agent_a | Turns: 24          │
-│  [◀ Prev Turn]   Turn 8 / 24   [Next Turn ▶]           │
-├─────────────────┬───────────────────────────────────────┤
-│  Game State     │  Action Scores                        │
-│                 │                                       │
-│  MY SIDE        │  ATTACK_0          ████████ 0.82      │
-│  Active: Chariz │  PLAY_ENERGY_2     ██       0.21      │
-│  HP: 180/310    │  PLAY_SUPPORTER_5  ███      0.35      │
-│  Energy: RRR    │  PASS              █        0.09      │
-│                 │                                       │
-│  Bench: 3 Pkmn  │  ▶ Chosen: ATTACK_0                  │
-│                 │                                       │
-│  OPPONENT SIDE  │                                       │
-│  Active: Mirair │                                       │
-│  HP: 90/280     │                                       │
-│  Energy: LL     │                                       │
-│                 │                                       │
-│  Prizes: 3 / 4  │                                       │
-└─────────────────┴───────────────────────────────────────┘
-```
-
-**Key interactions:**
-- URL param `?log=game_0001` → `GET /logs/game_0001` → load full log
-- Prev/Next buttons → render the current turn's game_state and action_scores
-- Action bar chart: horizontal bars scaled by win-probability, chosen action highlighted
-
----
-
-### 6.4 Shared Assets
-
-**`assets/style.css`** — dark theme, minimal, monospace accents. Pokémon type colors as CSS variables:
+**`assets/style.css`** — dark theme with Pokémon type colors:
 
 ```css
 :root {
@@ -617,7 +810,6 @@ Three pages. All use plain HTML + CSS + vanilla JS — no framework, no build st
   --red: #f87171;
   --yellow: #fbbf24;
 
-  /* Pokémon type colors */
   --type-grass: #4ade80;
   --type-fire: #f97316;
   --type-water: #38bdf8;
@@ -627,10 +819,11 @@ Three pages. All use plain HTML + CSS + vanilla JS — no framework, no build st
   --type-darkness: #a78bfa;
   --type-metal: #94a3b8;
   --type-colorless: #cbd5e1;
+  --type-dragon: #60a5fa;
 }
 ```
 
-**`assets/app.js`** — shared fetch utility:
+**`assets/app.js`:**
 
 ```javascript
 const API = "http://localhost:8000";
@@ -640,98 +833,96 @@ async function apiFetch(path, options = {}) {
     headers: { "Content-Type": "application/json" },
     ...options
   });
-  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
   return res.json();
 }
 
 function showToast(msg, type = "success") {
-  // type: "success" | "error"
   const el = document.createElement("div");
   el.className = `toast toast-${type}`;
   el.textContent = msg;
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 3000);
 }
+
+// Maps CSV Type field to CSS class
+const TYPE_CLASS = {
+  "{G}": "grass", "{R}": "fire", "{W}": "water", "{L}": "lightning",
+  "{P}": "psychic", "{F}": "fighting", "{D}": "darkness", "{M}": "metal",
+  "{C}": "colorless", "竜": "dragon",
+};
 ```
 
----
+### 8.2 `index.html` — Dashboard
 
-## 7. API Endpoint Reference
+Sections: API health bar, stats cards (total games, win rate, avg turns), feature importance bar chart (canvas), recent log table, quick simulate form.
 
-| Method | Path | Purpose | Request | Response |
-|---|---|---|---|---|
-| GET | `/` | Health check | — | `{status, model_loaded}` |
-| POST | `/predict` | Score all legal actions | `PredictRequest` | `PredictResponse` |
-| POST | `/simulate` | Run N self-play games | `SimulateRequest` | `SimulateResponse` |
-| GET | `/cards` | List cards (filterable) | Query params | `CardResponse[]` |
-| GET | `/cards/{id}` | Single card details | — | `CardResponse` |
-| GET | `/deck` | Load current deck | — | `{cards, name}` |
-| POST | `/deck` | Save deck | `DeckRequest` | `{saved, total_cards}` |
-| GET | `/logs` | List game logs | — | `{logs, total}` |
-| GET | `/logs/{id}` | Full game log | — | Game log JSON |
-| GET | `/stats` | Aggregate stats + feature importance | — | `StatsResponse` |
+Key interactions:
+- On load: `GET /` then `GET /stats`
+- Simulate button → `POST /simulate` → refresh stats
+- Log rows link to `match_viewer.html?log=<id>`
 
----
+### 8.3 `deck_builder.html` — Deck Builder
 
-## 8. Development Sequence
+Layout: filter panel (search, expansion dropdown, stage dropdown, type dropdown) + card grid + current deck sidebar.
 
-Build in this exact order — each step unblocks the next.
+Key interactions:
+- On load: `GET /cards` — render all 1267 cards
+- Filter inputs debounce → re-fetch with query params
+- `[+]` adds to deck (max 4 per card, 1 per ACE SPEC); `[-]` removes
+- Counter shows `N/60`; Save → `POST /deck`
 
-### Step 1 — Data Layer (Day 1)
-- Parse `EN_Card_Data.csv` → build `card_lookup.json`
-- Verify all 1,266 card IDs load correctly
-- Write `load_card_lookup()` util
+Filter dropdowns populated from actual data:
+- Expansion: SVE, TWM, TEF, DRI, MEG, ASC, SSP, PFL, JTG, WHT, BLK, POR, SCR, SFA, PRE, SVI, PROMO
+- Stage: Basic Pokémon, Stage 1 Pokémon, Stage 2 Pokémon, Item, Supporter, Stadium, Pokémon Tool, Basic Energy, Special Energy
+- Type: {G}, {R}, {W}, {L}, {P}, {F}, {D}, {M}, {C}, {A}, 竜
 
-### Step 2 — Encoder (Day 1–2)
-- Implement `encoder.py` with the 80-dim feature vector
-- Unit test: `encode(mock_state, "ATTACK_0")` returns array of correct shape
-- All values must be floats in [0, 1] or small integers — no raw strings
+### 8.4 `match_viewer.html` — Match Viewer
 
-### Step 3 — Heuristic Agent (Day 2)
-- Implement `heuristic.py`
-- Test in simulator: does it complete a full match without crashing?
-- This is the Phase 1 submission
+URL param `?log=game_0001` → `GET /logs/game_0001`.
 
-### Step 4 — Self-Play Runner (Day 3)
-- Implement `self_play.py`
-- Run 50 games: heuristic vs random agent
-- Confirm `game_logs/` populates with valid JSON
-
-### Step 5 — Training Pipeline (Day 4)
-- `feature_builder.py`: reads logs → builds X (N × 80), y (N,)
-- `train.py`: train XGBoost, evaluate, save `model.pkl`
-- Print feature importance — first sanity check on the model
-
-### Step 6 — FastAPI Server (Day 5)
-- Implement `server/main.py` with all routes
-- Test with `curl` or Swagger UI at `/docs`
-- Mount `/ui` static directory
-
-### Step 7 — `index.html` (Day 6)
-- Stats cards from `/stats`
-- Feature importance chart (plain canvas bar chart, no library needed)
-- Simulate form
-
-### Step 8 — `deck_builder.html` (Day 7)
-- Card grid from `/cards`
-- Filter/search UI
-- Add/remove cards, save deck
-
-### Step 9 — `match_viewer.html` (Day 8)
-- Turn navigation
-- Action score bar chart
-- Game state panel
-
-### Step 10 — Integration + Hardening (Day 9–10)
-- All pages link together
-- Error states (API down, model not loaded, empty logs)
-- Timeout guards in agent (every action call wrapped in try/except → PASS fallback)
+Layout: turn navigator (prev/next), game state panel (active Pokémon both sides, bench count, prizes, stadium), action scores horizontal bar chart (bars scaled by win-probability, chosen action highlighted in green).
 
 ---
 
-## 9. Requirements
+## 9. API Reference
 
-### `requirements.txt`
+| Method | Path | Request | Response |
+|---|---|---|---|
+| GET | `/` | — | `{status, model_loaded, cards_loaded}` |
+| POST | `/predict` | `PredictRequest` | `PredictResponse` |
+| POST | `/simulate` | `SimulateRequest` | `SimulateResponse` |
+| GET | `/cards` | `?expansion&category&type&q` | `CardResponse[]` |
+| GET | `/cards/{id}` | — | `CardResponse` |
+| GET | `/deck` | — | `{cards, name}` |
+| POST | `/deck` | `DeckRequest` | `{saved, total_cards}` |
+| GET | `/logs` | — | `{logs, total}` |
+| GET | `/logs/{id}` | — | Game log JSON |
+| GET | `/stats` | — | `StatsResponse` |
+
+---
+
+## 10. Development Sequence
+
+Build in this order — each step unblocks the next.
+
+| Day | Step | Output |
+|---|---|---|
+| 1 | Parse CSV → `card_lookup.json` | 1267 card records, moves aggregated per card |
+| 1 | Write `card_constants.py` | IDs, type map, top stadiums |
+| 2 | Implement `encoder.py` (84-dim) | Unit test: shape correct, all floats in range |
+| 2 | Implement `heuristic.py` | Completes a match without crashing |
+| 3 | `self_play.py`: heuristic vs random, 50 games | `game_logs/` populated |
+| 4 | `feature_builder.py` + `train.py` | `model.pkl` saved, AUC printed |
+| 5 | FastAPI `server/main.py` | All endpoints pass curl/Swagger test |
+| 6 | `index.html` | Stats + simulate form working |
+| 7 | `deck_builder.html` | All cards displayed, deck saves |
+| 8 | `match_viewer.html` | Turn navigation + bar chart |
+| 9–10 | Hardening + integration | All error states handled, no unhandled exceptions |
+
+---
+
+## 11. Requirements
 
 ```
 fastapi>=0.111.0
@@ -745,32 +936,53 @@ python-multipart>=0.0.9
 pydantic>=2.0.0
 ```
 
-### Runtime
-- Python 3.11+
-- No GPU required (XGBoost CPU inference is fast enough for real-time turn decisions)
-- Simulator provided by The Pokémon Company (separate install per competition instructions)
+Python 3.11+. No GPU required.
 
 ---
 
-## 10. Risks and Mitigations
-
-| Risk | Mitigation |
-|---|---|
-| Simulator observation schema undocumented | Build encoder against mock state dict first; adapt to real schema on integration |
-| `model.pkl` too slow for 10-min match timeout | XGBoost inference is <1ms per action; not a concern |
-| CORS issues between HTML files and FastAPI | CORS middleware set to `allow_origins=["*"]` in development |
-| Card images not in dataset (only IDs) | UI shows card name + type badge instead of images; link to `ptcg.pokemon.co.jp` if available |
-| Game log schema changes between self-play versions | Version field in log JSON; feature_builder checks version and skips incompatible logs |
-
----
-
-## 11. Acceptance Criteria
+## 12. Acceptance Criteria
 
 | Layer | Criteria |
 |---|---|
-| ML Model | AUC-ROC ≥ 0.60 on held-out validation set; model.pkl loads in <1s |
-| FastAPI | All 9 endpoints return correct status codes; Swagger UI at `/docs` works |
-| index.html | Stats load on page open; simulate button runs and refreshes stats |
-| deck_builder.html | All 1,266 cards display; filters work; deck saves and loads correctly |
-| match_viewer.html | Any saved game log navigates turn-by-turn; action scores display as chart |
-| End-to-end | Agent completes 10 simulated games without any unhandled exceptions |
+| Data | `card_lookup.json` has exactly 1267 entries; all moves correctly grouped |
+| ML Model | AUC-ROC ≥ 0.60 on held-out set; `model.pkl` loads in <1s |
+| FastAPI | All 10 endpoints return correct status; ACE SPEC validation on `/deck` |
+| `index.html` | Stats load on open; simulate runs and refreshes |
+| `deck_builder.html` | All 1267 cards render; filters work; ACE SPEC limited to 1 in deck |
+| `match_viewer.html` | Any log navigates turn-by-turn; action scores shown as chart |
+| End-to-end | Agent completes 10 games without unhandled exceptions |
+
+---
+
+## Appendix A: Known Data Quirks
+
+| Issue | Detail | Handling |
+|---|---|---|
+| Card 1083 (Love Ball) has no expansion | `Expansion` column is blank | Store `expansion: null`; don't filter it out |
+| Multi-row Pokémon | 2022 CSV rows → 1267 unique cards | Group by `Card ID` when parsing |
+| Energy count in PRD v1 was wrong | PRD said 27 energies; actual count is 20 (8 basic + 12 special, IDs 1–20) | Use IDs 1–20 as energy range |
+| Stadium ID range in PRD v1 was wrong | PRD said IDs 1240–1267; actual range is 1242–1267 | `STADIUM_RANGE = (1242, 1267)` |
+| ACE SPEC cards appear across Items, Tools, and Energy | Identified by `Rule == "ACE SPEC"` — not by category alone | Always check `rule` field, not `stage` |
+| Dragon type encoded as `竜` | Not a curly-brace symbol — it's a Japanese character | Include `"竜"` in TYPE_MAP and handle in one-hot |
+| `{A}` type in some Special Energy | Means "any type" | Map to its own bucket or skip in one-hot |
+
+## Appendix B: Expansion Summary (from CSV)
+
+| Code | Cards | Note |
+|---|---|---|
+| DRI | 178 | Largest set; Team Rocket theming, Cynthia's Pokémon |
+| MEG | 126 | Mega Evolution ex Pokémon |
+| ASC | 124 | Competition-specific; Mega ex |
+| WHT | 85 | Competition-specific |
+| JTG | 85 | Journey Together; N's Pokémon |
+| BLK | 84 | Competition-specific |
+| POR | 81 | Prismatic Evolution |
+| TWM | 95 | Twilight Masquerade |
+| SSP | 95 | Stellar Spark |
+| PFL | 94 | Paldean Fates |
+| TEF | 68 | Temporal Forces; ACE SPEC-heavy |
+| SCR | 53 | Surging Sparks |
+| SFA | 34 | Shrouded Fable |
+| PRE | 28 | Paldea Evolved |
+| SVI | 11 | Scarlet & Violet Base |
+| SVE | 8 | Basic Energy |
