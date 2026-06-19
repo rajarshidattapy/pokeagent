@@ -1,6 +1,9 @@
 # Arceus — Autonomous Pokémon TCG Battle Agent
 Kaggle PTCG AI Battle Challenge (Strategy Category)
 
+<img width="1496" height="917" alt="image" src="https://github.com/user-attachments/assets/917aac65-08a2-4f79-809c-4eb61d956c98" />
+
+
 An ML-powered agent that plays the Pokémon Trading Card Game through self-play reinforcement learning. The system simulates full TCG games between a heuristic agent and a random opponent, logs every decision as a labeled training sample, and trains an XGBoost policy model to predict the highest-value action at any game state.
 
 The agent encodes each board state into an 84-dimensional feature vector — capturing HP ratios, Pokémon types, energy counts, hand composition, prize counts, bench size, and action type — then scores all legal actions to select the best move in real time.
