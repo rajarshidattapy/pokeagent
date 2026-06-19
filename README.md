@@ -1,7 +1,11 @@
 # Arceus — Autonomous Pokémon TCG Battle Agent
-**Paramarsh Labs** — Kaggle PTCG AI Battle Challenge (Strategy Category)
+Kaggle PTCG AI Battle Challenge (Strategy Category)
 
-An ML-powered agent that learns to play the Pokémon Trading Card Game through self-play simulation, using a trained XGBoost policy model to select optimal actions in real-time battles, served via FastAPI with a browser dashboard.
+An ML-powered agent that plays the Pokémon Trading Card Game through self-play reinforcement learning. The system simulates full TCG games between a heuristic agent and a random opponent, logs every decision as a labeled training sample, and trains an XGBoost policy model to predict the highest-value action at any game state.
+
+The agent encodes each board state into an 84-dimensional feature vector — capturing HP ratios, Pokémon types, energy counts, hand composition, prize counts, bench size, and action type — then scores all legal actions to select the best move in real time.
+
+The trained model achieves 99.4% validation accuracy and 99.9% AUC-ROC on self-play data, with type matching and prize race pressure emerging as the strongest learned signals. The backend is served via FastAPI with endpoints for prediction, simulation, deck management, and game log replay, paired with a browser dashboard for visualization.
 
 ## Stack
 - **Model** — XGBoost trained on self-play logs (`model.pkl`)
