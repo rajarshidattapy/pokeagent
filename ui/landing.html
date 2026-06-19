@@ -451,6 +451,21 @@
       50% { opacity: 0.6; }
     }
 
+    /* ── Logo float ── */
+    @keyframes logo-float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+    }
+
+    /* ── Nav logo ── */
+    .nav-logo {
+      height: 28px;
+      width: auto;
+      image-rendering: pixelated;
+      filter: drop-shadow(0 0 6px #fbbf2488);
+      flex-shrink: 0;
+    }
+
     /* ── Responsive ── */
     @media (max-width: 600px) {
       .stats-row { gap: 12px; }
@@ -467,6 +482,11 @@
 <!-- ── HERO ── -->
 <section class="hero">
   <div class="pixel-badge">▶ KAGGLE PTCG AI CHALLENGE</div>
+
+  <img src="assets/logo.png" alt="Arceus logo"
+    style="width:clamp(80px,14vw,140px);height:auto;margin-bottom:20px;
+           filter:drop-shadow(0 0 18px #fbbf24aa) drop-shadow(0 0 40px #fbbf2444);
+           image-rendering:pixelated;animation:logo-float 3s ease-in-out infinite;">
 
   <h1 class="hero-title">
     <span>ARCEUS</span>
