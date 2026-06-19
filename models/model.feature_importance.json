@@ -1,0 +1,338 @@
+[
+  {
+    "name": "opp_type_8",
+    "score": 0.15932342410087585
+  },
+  {
+    "name": "active_type_8",
+    "score": 0.12203910946846008
+  },
+  {
+    "name": "opp_prizes",
+    "score": 0.08523637801408768
+  },
+  {
+    "name": "opp_active_hp_ratio",
+    "score": 0.06834179908037186
+  },
+  {
+    "name": "active_hp_ratio",
+    "score": 0.058236394077539444
+  },
+  {
+    "name": "active_retreat",
+    "score": 0.05341283604502678
+  },
+  {
+    "name": "action_type_5",
+    "score": 0.05148674175143242
+  },
+  {
+    "name": "bench_hp_1",
+    "score": 0.045416563749313354
+  },
+  {
+    "name": "opp_bench_size",
+    "score": 0.04234546050429344
+  },
+  {
+    "name": "bench_hp_0",
+    "score": 0.02961738593876362
+  },
+  {
+    "name": "opp_type_6",
+    "score": 0.02926897630095482
+  },
+  {
+    "name": "active_type_6",
+    "score": 0.028383290395140648
+  },
+  {
+    "name": "bench_size",
+    "score": 0.026409659534692764
+  },
+  {
+    "name": "opp_type_4",
+    "score": 0.02195119857788086
+  },
+  {
+    "name": "active_type_4",
+    "score": 0.021429909393191338
+  },
+  {
+    "name": "hand_pokemon",
+    "score": 0.019435685127973557
+  },
+  {
+    "name": "hand_supporters",
+    "score": 0.01572101004421711
+  },
+  {
+    "name": "turn_norm",
+    "score": 0.013862499967217445
+  },
+  {
+    "name": "hand_energy",
+    "score": 0.013733163475990295
+  },
+  {
+    "name": "deck_remaining",
+    "score": 0.012439068406820297
+  },
+  {
+    "name": "active_energy_8",
+    "score": 0.01109029445797205
+  },
+  {
+    "name": "opp_energy_8",
+    "score": 0.010875770822167397
+  },
+  {
+    "name": "hand_trainers",
+    "score": 0.009867949411273003
+  },
+  {
+    "name": "hand_total",
+    "score": 0.008386272005736828
+  },
+  {
+    "name": "opp_energy_4",
+    "score": 0.007486665155738592
+  },
+  {
+    "name": "action_type_0",
+    "score": 0.006386938039213419
+  },
+  {
+    "name": "evolve_hp_gain",
+    "score": 0.0053194435313344
+  },
+  {
+    "name": "active_energy_4",
+    "score": 0.004974949173629284
+  },
+  {
+    "name": "energy_enables_attack",
+    "score": 0.004165484569966793
+  },
+  {
+    "name": "action_type_2",
+    "score": 0.0038238679990172386
+  },
+  {
+    "name": "action_type_1",
+    "score": 0.0035664590541273355
+  },
+  {
+    "name": "action_type_6",
+    "score": 0.0032341976184397936
+  },
+  {
+    "name": "action_type_3",
+    "score": 0.002731122076511383
+  },
+  {
+    "name": "active_type_0",
+    "score": 0.0
+  },
+  {
+    "name": "active_type_1",
+    "score": 0.0
+  },
+  {
+    "name": "active_type_2",
+    "score": 0.0
+  },
+  {
+    "name": "active_type_3",
+    "score": 0.0
+  },
+  {
+    "name": "active_type_5",
+    "score": 0.0
+  },
+  {
+    "name": "active_type_7",
+    "score": 0.0
+  },
+  {
+    "name": "active_energy_0",
+    "score": 0.0
+  },
+  {
+    "name": "active_energy_1",
+    "score": 0.0
+  },
+  {
+    "name": "active_energy_2",
+    "score": 0.0
+  },
+  {
+    "name": "active_energy_3",
+    "score": 0.0
+  },
+  {
+    "name": "active_energy_5",
+    "score": 0.0
+  },
+  {
+    "name": "active_energy_6",
+    "score": 0.0
+  },
+  {
+    "name": "active_energy_7",
+    "score": 0.0
+  },
+  {
+    "name": "active_is_ex",
+    "score": 0.0
+  },
+  {
+    "name": "bench_hp_2",
+    "score": 0.0
+  },
+  {
+    "name": "bench_hp_3",
+    "score": 0.0
+  },
+  {
+    "name": "bench_hp_4",
+    "score": 0.0
+  },
+  {
+    "name": "opp_type_0",
+    "score": 0.0
+  },
+  {
+    "name": "opp_type_1",
+    "score": 0.0
+  },
+  {
+    "name": "opp_type_2",
+    "score": 0.0
+  },
+  {
+    "name": "opp_type_3",
+    "score": 0.0
+  },
+  {
+    "name": "opp_type_5",
+    "score": 0.0
+  },
+  {
+    "name": "opp_type_7",
+    "score": 0.0
+  },
+  {
+    "name": "opp_energy_0",
+    "score": 0.0
+  },
+  {
+    "name": "opp_energy_1",
+    "score": 0.0
+  },
+  {
+    "name": "opp_energy_2",
+    "score": 0.0
+  },
+  {
+    "name": "opp_energy_3",
+    "score": 0.0
+  },
+  {
+    "name": "opp_energy_5",
+    "score": 0.0
+  },
+  {
+    "name": "opp_energy_6",
+    "score": 0.0
+  },
+  {
+    "name": "opp_energy_7",
+    "score": 0.0
+  },
+  {
+    "name": "opp_is_ex",
+    "score": 0.0
+  },
+  {
+    "name": "my_prizes",
+    "score": 0.0
+  },
+  {
+    "name": "stadium_0",
+    "score": 0.0
+  },
+  {
+    "name": "stadium_1",
+    "score": 0.0
+  },
+  {
+    "name": "stadium_2",
+    "score": 0.0
+  },
+  {
+    "name": "stadium_3",
+    "score": 0.0
+  },
+  {
+    "name": "stadium_4",
+    "score": 0.0
+  },
+  {
+    "name": "stadium_5",
+    "score": 0.0
+  },
+  {
+    "name": "stadium_6",
+    "score": 0.0
+  },
+  {
+    "name": "stadium_7",
+    "score": 0.0
+  },
+  {
+    "name": "stadium_8",
+    "score": 0.0
+  },
+  {
+    "name": "stadium_9",
+    "score": 0.0
+  },
+  {
+    "name": "status_burned",
+    "score": 0.0
+  },
+  {
+    "name": "status_poisoned",
+    "score": 0.0
+  },
+  {
+    "name": "status_confused",
+    "score": 0.0
+  },
+  {
+    "name": "status_paralyzed",
+    "score": 0.0
+  },
+  {
+    "name": "status_asleep",
+    "score": 0.0
+  },
+  {
+    "name": "action_type_4",
+    "score": 0.0
+  },
+  {
+    "name": "attack_damage_norm",
+    "score": 0.0
+  },
+  {
+    "name": "attack_ko_flag",
+    "score": 0.0
+  },
+  {
+    "name": "attack_risk_flag",
+    "score": 0.0
+  }
+]
