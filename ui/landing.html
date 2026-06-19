@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arceus — Autonomous Pokémon TCG Battle Agent</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+    :root {
+      --bg: #0f0f14;
+      --surface: #1a1a24;
+      --border: #2a2a3a;
+      --text: #e8e8f0;
+      --muted: #7a7a99;
+      --accent: #6c63ff;
+      --green: #4ade80;
+      --red: #f87171;
+      --yellow: #fbbf24;
+      --blue: #60a5fa;
+      --psychic: #e879f9;
+      --pixel: "Press Start 2P", monospace;
+      --mono: "SF Mono", "Fira Code", monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      overflow-x: hidden;
+      cursor: default;
+    }
+
+    /* ── Scanline overlay ── */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.07) 2px,
+        rgba(0,0,0,0.07) 4px
+      );
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    /* ── Pixel canvas bg ── */
+    #pixelCanvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      opacity: 0.18;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 24px;
+      text-align: center;
+    }
+
+    .pixel-badge {
+      font-family: var(--pixel);
+      font-size: 9px;
+      color: var(--yellow);
+      letter-spacing: 0.1em;
+      border: 2px solid var(--yellow);
+      padding: 6px 14px;
+      margin-bottom: 32px;
+      image-rendering: pixelated;
+      text-shadow: 2px 2px 0 #000;
+      animation: blink-border 1.4s step-end infinite;
+    }
+
+    @keyframes blink-border {
+      0%, 100% { border-color: var(--yellow); }
+      50% { border-color: transparent; }
+    }
+
+    .hero-title {
+      font-family: var(--pixel);
+      font-size: clamp(20px, 5vw, 42px);
+      line-height: 1.5;
+      color: #fff;
+      text-shadow:
+        4px 4px 0 var(--accent),
+        8px 8px 0 #000;
+      margin-bottom: 8px;
+      letter-spacing: 0.04em;
+    }
+
+    .hero-title span {
+      color: var(--psychic);
+      text-shadow:
+        4px 4px 0 #7b2d8b,
+        8px 8px 0 #000;
+    }
+
+    .hero-sub {
+      font-family: var(--pixel);
+      font-size: clamp(7px, 1.5vw, 11px);
+      color: var(--muted);
+      line-height: 2;
+      margin-top: 24px;
+      max-width: 640px;
+      text-shadow: 1px 1px 0 #000;
+    }
+
+    /* ── Pixel divider ── */
+    .pixel-divider {
+      width: 100%;
+      max-width: 480px;
+      height: 4px;
+      margin: 32px auto;
+      background: repeating-linear-gradient(
+        90deg,
+        var(--accent) 0, var(--accent) 8px,
+        transparent 8px, transparent 12px
+      );
+    }
+
+    /* ── Stat chips ── */
+    .stats-row {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 40px;
+    }
+
+    .stat-chip {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      padding: 12px 20px;
+      font-family: var(--pixel);
+      font-size: 9px;
+      line-height: 2;
+      text-align: center;
+      position: relative;
+      image-rendering: pixelated;
+      /* pixel corners */
+      clip-path: polygon(4px 0%, calc(100% - 4px) 0%, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0% calc(100% - 4px), 0% 4px);
+      transition: border-color 0.2s, transform 0.1s;
+    }
+    .stat-chip:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .stat-chip .val {
+      display: block;
+      font-size: 18px;
+      margin-bottom: 4px;
+    }
+    .stat-chip .val.green { color: var(--green); text-shadow: 0 0 8px var(--green); }
+    .stat-chip .val.yellow { color: var(--yellow); text-shadow: 0 0 8px var(--yellow); }
+    .stat-chip .val.blue { color: var(--blue); text-shadow: 0 0 8px var(--blue); }
+    .stat-chip .val.psychic { color: var(--psychic); text-shadow: 0 0 8px var(--psychic); }
+    .stat-chip .lbl { color: var(--muted); font-size: 7px; }
+
+    /* ── CTA buttons ── */
+    .cta-row {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .cta-btn {
+      font-family: var(--pixel);
+      font-size: 10px;
+      padding: 14px 28px;
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      clip-path: polygon(4px 0%, calc(100% - 4px) 0%, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0% calc(100% - 4px), 0% 4px);
+      transition: filter 0.15s, transform 0.1s;
+      letter-spacing: 0.05em;
+      position: relative;
+    }
+    .cta-btn:hover { filter: brightness(1.15); transform: translateY(-2px); }
+    .cta-btn:active { transform: translateY(0); }
+
+    .cta-btn.primary { background: var(--accent); color: #fff; text-shadow: 1px 1px 0 #000; }
+    .cta-btn.secondary { background: var(--surface); color: var(--text); border: 2px solid var(--border); }
+    .cta-btn.secondary:hover { border-color: var(--accent); }
+
+    /* ── Features section ── */
+    .section {
+      position: relative;
+      z-index: 1;
+      padding: 80px 24px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .section-title {
+      font-family: var(--pixel);
+      font-size: clamp(11px, 2vw, 16px);
+      color: var(--accent);
+      text-align: center;
+      margin-bottom: 48px;
+      text-shadow: 2px 2px 0 #000;
+      letter-spacing: 0.08em;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+    }
+
+    .feature-card {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      padding: 24px;
+      clip-path: polygon(4px 0%, calc(100% - 4px) 0%, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0% calc(100% - 4px), 0% 4px);
+      transition: border-color 0.2s, transform 0.15s;
+    }
+    .feature-card:hover { border-color: var(--accent); transform: translateY(-3px); }
+
+    .feature-icon {
+      font-size: 28px;
+      margin-bottom: 16px;
+      display: block;
+      image-rendering: pixelated;
+    }
+
+    .feature-title {
+      font-family: var(--pixel);
+      font-size: 10px;
+      color: var(--text);
+      margin-bottom: 12px;
+      line-height: 1.6;
+    }
+
+    .feature-desc {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+
+    /* ── Pipeline section ── */
+    .pipeline {
+      position: relative;
+      z-index: 1;
+      background: var(--surface);
+      border-top: 2px solid var(--border);
+      border-bottom: 2px solid var(--border);
+      padding: 80px 24px;
+    }
+
+    .pipeline-inner {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .pipeline-steps {
+      display: flex;
+      align-items: flex-start;
+      gap: 0;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 40px;
+    }
+
+    .pipeline-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      width: 160px;
+      text-align: center;
+    }
+
+    .step-box {
+      background: var(--bg);
+      border: 2px solid var(--accent);
+      width: 80px; height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      clip-path: polygon(6px 0%, calc(100% - 6px) 0%, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0% calc(100% - 6px), 0% 6px);
+      position: relative;
+    }
+
+    .step-num {
+      position: absolute;
+      top: -8px; right: -8px;
+      background: var(--accent);
+      color: #fff;
+      font-family: var(--pixel);
+      font-size: 8px;
+      width: 20px; height: 20px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .step-label {
+      font-family: var(--pixel);
+      font-size: 8px;
+      color: var(--text);
+      line-height: 1.8;
+    }
+
+    .step-sub {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .step-arrow {
+      font-family: var(--pixel);
+      font-size: 18px;
+      color: var(--border);
+      padding-top: 28px;
+      flex-shrink: 0;
+    }
+
+    /* ── Top features bar ── */
+    .feat-section {
+      position: relative;
+      z-index: 1;
+      padding: 80px 24px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .feat-bar-list { display: flex; flex-direction: column; gap: 10px; margin-top: 32px; }
+
+    .feat-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 11px;
+    }
+
+    .feat-bar-name {
+      font-family: var(--pixel);
+      font-size: 7px;
+      color: var(--muted);
+      width: 180px;
+      flex-shrink: 0;
+      text-align: right;
+    }
+
+    .feat-bar-bg {
+      flex: 1;
+      height: 18px;
+      background: var(--border);
+      position: relative;
+      clip-path: polygon(2px 0%, calc(100% - 2px) 0%, 100% 2px, 100% calc(100% - 2px), calc(100% - 2px) 100%, 2px 100%, 0% calc(100% - 2px), 0% 2px);
+    }
+
+    .feat-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--psychic));
+      transition: width 1.2s cubic-bezier(0.16,1,0.3,1);
+    }
+
+    .feat-bar-val {
+      font-family: var(--pixel);
+      font-size: 7px;
+      color: var(--text);
+      width: 44px;
+      flex-shrink: 0;
+    }
+
+    /* ── Footer ── */
+    footer {
+      position: relative;
+      z-index: 1;
+      background: var(--surface);
+      border-top: 2px solid var(--border);
+      padding: 32px 24px;
+      text-align: center;
+    }
+
+    .footer-brand {
+      font-family: var(--pixel);
+      font-size: 12px;
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+
+    .footer-sub {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 2;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 24px;
+      justify-content: center;
+      margin-top: 20px;
+    }
+
+    .footer-links a {
+      font-family: var(--pixel);
+      font-size: 8px;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+    .footer-links a:hover { color: var(--accent); }
+
+    /* ── Pixel cursor blink ── */
+    .cursor {
+      display: inline-block;
+      width: 10px; height: 18px;
+      background: var(--psychic);
+      vertical-align: middle;
+      margin-left: 4px;
+      animation: cursor-blink 0.9s step-end infinite;
+    }
+    @keyframes cursor-blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    /* ── Pixel HP bar (decorative) ── */
+    .hp-display {
+      display: flex;
+      gap: 3px;
+      justify-content: center;
+      margin: 20px 0;
+    }
+    .hp-block {
+      width: 12px; height: 20px;
+      background: var(--green);
+      animation: hp-pulse 2s ease-in-out infinite;
+    }
+    .hp-block:nth-child(n+7) { background: var(--yellow); }
+    .hp-block:nth-child(n+10) { background: var(--red); }
+    .hp-block:nth-child(n+12) { background: var(--border); animation: none; }
+    @keyframes hp-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      .stats-row { gap: 12px; }
+      .stat-chip { padding: 10px 14px; }
+      .step-arrow { display: none; }
+      .feat-bar-name { width: 110px; font-size: 6px; }
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="pixelCanvas"></canvas>
+
+<!-- ── HERO ── -->
+<section class="hero">
+  <div class="pixel-badge">▶ KAGGLE PTCG AI CHALLENGE</div>
+
+  <h1 class="hero-title">
+    <span>ARCEUS</span>
+  </h1>
+  <h2 class="hero-title" style="font-size:clamp(10px,2.5vw,20px);text-shadow:2px 2px 0 #000;margin-top:12px;color:var(--muted)">
+    AUTONOMOUS POKÉMON TCG<br>BATTLE AGENT
+  </h2>
+
+  <div class="hp-display">
+    <div class="hp-block"></div><div class="hp-block"></div><div class="hp-block"></div>
+    <div class="hp-block"></div><div class="hp-block"></div><div class="hp-block"></div>
+    <div class="hp-block"></div><div class="hp-block"></div><div class="hp-block"></div>
+    <div class="hp-block"></div><div class="hp-block"></div>
+    <div class="hp-block"></div><div class="hp-block"></div><div class="hp-block"></div>
+  </div>
+
+  <p class="hero-sub">
+    Self-play simulation → XGBoost policy model → real-time battle decisions<br>
+    84 board features · 1,266 cards · 26 expansions<span class="cursor"></span>
+  </p>
+
+  <div class="pixel-divider"></div>
+
+  <div class="stats-row">
+    <div class="stat-chip">
+      <span class="val green">99.4%</span>
+      <span class="lbl">VAL ACCURACY</span>
+    </div>
+    <div class="stat-chip">
+      <span class="val psychic">99.9%</span>
+      <span class="lbl">AUC-ROC</span>
+    </div>
+    <div class="stat-chip">
+      <span class="val blue">84</span>
+      <span class="lbl">FEATURES</span>
+    </div>
+    <div class="stat-chip">
+      <span class="val yellow">1,266</span>
+      <span class="lbl">CARDS LOADED</span>
+    </div>
+    <div class="stat-chip">
+      <span class="val green">500</span>
+      <span class="lbl">XGBOOST TREES</span>
+    </div>
+  </div>
+
+  <div class="cta-row">
+    <a href="index.html" class="cta-btn primary">▶ OPEN DASHBOARD</a>
+    <a href="deck_builder.html" class="cta-btn secondary">⊞ DECK BUILDER</a>
+    <a href="match_viewer.html" class="cta-btn secondary">◈ MATCH VIEWER</a>
+  </div>
+</section>
+
+<!-- ── PIPELINE ── -->
+<div class="pipeline">
+  <div class="pipeline-inner">
+    <div class="section-title">// HOW IT WORKS</div>
+    <div class="pipeline-steps">
+
+      <div class="pipeline-step">
+        <div class="step-box">
+          🎴
+          <div class="step-num">1</div>
+        </div>
+        <div class="step-label">SELF-PLAY</div>
+        <div class="step-sub">Heuristic vs Random agent simulates full TCG games</div>
+      </div>
+
+      <div class="step-arrow">→</div>
+
+      <div class="pipeline-step">
+        <div class="step-box">
+          📝
+          <div class="step-num">2</div>
+        </div>
+        <div class="step-label">LOG ACTIONS</div>
+        <div class="step-sub">Every decision stored as labeled (state, action, outcome)</div>
+      </div>
+
+      <div class="step-arrow">→</div>
+
+      <div class="pipeline-step">
+        <div class="step-box">
+          🧮
+          <div class="step-num">3</div>
+        </div>
+        <div class="step-label">ENCODE STATE</div>
+        <div class="step-sub">84-dim float32 vector: HP, types, energy, prizes, bench</div>
+      </div>
+
+      <div class="step-arrow">→</div>
+
+      <div class="pipeline-step">
+        <div class="step-box">
+          🌲
+          <div class="step-num">4</div>
+        </div>
+        <div class="step-label">TRAIN MODEL</div>
+        <div class="step-sub">XGBoost learns win-predicting policy from game logs</div>
+      </div>
+
+      <div class="step-arrow">→</div>
+
+      <div class="pipeline-step">
+        <div class="step-box">
+          ⚔️
+          <div class="step-num">5</div>
+        </div>
+        <div class="step-label">BATTLE</div>
+        <div class="step-sub">Agent scores legal actions and picks the best move</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── FEATURES ── -->
+<section class="section">
+  <div class="section-title">// WHAT'S INSIDE</div>
+  <div class="feature-grid">
+
+    <div class="feature-card">
+      <span class="feature-icon">🤖</span>
+      <div class="feature-title">XGBOOST POLICY</div>
+      <div class="feature-desc">500-tree gradient boosted classifier trained on self-play logs. Scores every legal action and picks the highest-value move at each game state.</div>
+    </div>
+
+    <div class="feature-card">
+      <span class="feature-icon">🔁</span>
+      <div class="feature-title">SELF-PLAY ENGINE</div>
+      <div class="feature-desc">Full TCG game simulator: draws, retreats, attacks, evolution, trainer cards, energy attachment — heuristic vs random or any agent pair.</div>
+    </div>
+
+    <div class="feature-card">
+      <span class="feature-icon">📡</span>
+      <div class="feature-title">FASTAPI BACKEND</div>
+      <div class="feature-desc">REST API with /predict, /simulate, /cards, /deck, /logs and /stats. Ready for Kaggle submission integration.</div>
+    </div>
+
+    <div class="feature-card">
+      <span class="feature-icon">🃏</span>
+      <div class="feature-title">1,266 EN CARDS</div>
+      <div class="feature-desc">Full English card database across 26 expansions with type, HP, retreat cost, stage, energy, and ACE SPEC metadata.</div>
+    </div>
+
+    <div class="feature-card">
+      <span class="feature-icon">🏗️</span>
+      <div class="feature-title">DECK BUILDER</div>
+      <div class="feature-desc">Visual deck editor with 60-card validation, ACE SPEC enforcement, expansion/type filtering, and save/load via API.</div>
+    </div>
+
+    <div class="feature-card">
+      <span class="feature-icon">🎞️</span>
+      <div class="feature-title">MATCH VIEWER</div>
+      <div class="feature-desc">Step through every decision in a game log — board state, legal actions, action scores, HP bars, prize tracking, and turn-by-turn replay.</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── TOP FEATURES ── -->
+<div style="background:var(--surface);border-top:2px solid var(--border);border-bottom:2px solid var(--border)">
+  <div class="feat-section">
+    <div class="section-title">// TOP LEARNED SIGNALS</div>
+    <div class="feat-bar-list" id="featBars"></div>
+  </div>
+</div>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <div class="footer-brand">ARCEUS v1.0</div>
+  <div class="footer-sub">
+    Kaggle PTCG AI Battle Challenge · Strategy Category<br>
+    Submission deadline: Aug 17, 2026 · Strategy Report: Sep 14, 2026
+  </div>
+  <div class="footer-links">
+    <a href="index.html">DASHBOARD</a>
+    <a href="deck_builder.html">DECK BUILDER</a>
+    <a href="match_viewer.html">MATCH VIEWER</a>
+  </div>
+</footer>
+
+<script>
+/* ── Pixel canvas background ── */
+(function () {
+  const canvas = document.getElementById("pixelCanvas");
+  const ctx = canvas.getContext("2d");
+  const TILE = 20;
+  let cols, rows, grid, nextGrid;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    cols = Math.ceil(canvas.width / TILE);
+    rows = Math.ceil(canvas.height / TILE);
+    grid = Array.from({ length: rows }, () =>
+      Array.from({ length: cols }, () => Math.random() < 0.18 ? 1 : 0)
+    );
+  }
+
+  function countNeighbors(g, r, c) {
+    let n = 0;
+    for (let dr = -1; dr <= 1; dr++)
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const nr = (r + dr + rows) % rows;
+        const nc = (c + dc + cols) % cols;
+        n += g[nr][nc];
+      }
+    return n;
+  }
+
+  const COLORS = ["#6c63ff", "#e879f9", "#4ade80", "#60a5fa", "#fbbf24"];
+  let colorGrid;
+
+  function initColors() {
+    colorGrid = Array.from({ length: rows }, () =>
+      Array.from({ length: cols }, () => COLORS[Math.floor(Math.random() * COLORS.length)])
+    );
+  }
+
+  function step() {
+    nextGrid = Array.from({ length: rows }, (_, r) =>
+      Array.from({ length: cols }, (_, c) => {
+        const n = countNeighbors(grid, r, c);
+        if (grid[r][c]) return (n === 2 || n === 3) ? 1 : 0;
+        return n === 3 ? 1 : 0;
+      })
+    );
+    grid = nextGrid;
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (grid[r][c]) {
+          ctx.fillStyle = colorGrid[r][c];
+          ctx.fillRect(c * TILE + 1, r * TILE + 1, TILE - 2, TILE - 2);
+        }
+      }
+    }
+  }
+
+  resize();
+  initColors();
+  window.addEventListener("resize", () => { resize(); initColors(); });
+
+  let frame = 0;
+  function loop() {
+    if (frame % 8 === 0) { step(); draw(); }
+    frame++;
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
+
+/* ── Feature importance bars ── */
+const features = [
+  { name: "opp_type_8",         score: 0.1593, label: "Opp Type (Psychic)" },
+  { name: "active_type_8",      score: 0.1220, label: "My Type (Psychic)"  },
+  { name: "opp_prizes",         score: 0.0852, label: "Opp Prizes Left"    },
+  { name: "opp_active_hp_ratio",score: 0.0683, label: "Opp Active HP %"    },
+  { name: "active_hp_ratio",    score: 0.0582, label: "My Active HP %"     },
+  { name: "active_retreat",     score: 0.0534, label: "My Retreat Cost"    },
+  { name: "action_type_5",      score: 0.0515, label: "RETREAT Action"     },
+  { name: "bench_hp_1",         score: 0.0454, label: "Bench Slot 1 HP"   },
+  { name: "opp_bench_size",     score: 0.0423, label: "Opp Bench Count"   },
+  { name: "bench_hp_0",         score: 0.0296, label: "Bench Slot 0 HP"   },
+];
+
+const max = features[0].score;
+const container = document.getElementById("featBars");
+
+features.forEach(f => {
+  const pct = (f.score / max * 100).toFixed(1);
+  const row = document.createElement("div");
+  row.className = "feat-bar-row";
+  row.innerHTML = `
+    <div class="feat-bar-name">${f.label.toUpperCase()}</div>
+    <div class="feat-bar-bg">
+      <div class="feat-bar-fill" style="width:0%" data-pct="${pct}%"></div>
+    </div>
+    <div class="feat-bar-val">${(f.score * 100).toFixed(1)}%</div>
+  `;
+  container.appendChild(row);
+});
+
+// Animate bars in on scroll
+const observer = new IntersectionObserver(entries => {
+  if (entries[0].isIntersecting) {
+    document.querySelectorAll(".feat-bar-fill").forEach(el => {
+      el.style.width = el.dataset.pct;
+    });
+    observer.disconnect();
+  }
+}, { threshold: 0.2 });
+observer.observe(container);
+</script>
+</body>
+</html>
