@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PTCG Agent — Deck Builder</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    .layout { display: grid; grid-template-columns: 240px 1fr; gap: 16px; }
+    .filters { display: flex; flex-direction: column; gap: 10px; }
+    .filter-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .deck-sidebar { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+    .deck-entry { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+    .deck-entry-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .deck-count-badge {
+      background: var(--accent);
+      color: #fff;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 11px;
+      margin-left: 8px;
+      flex-shrink: 0;
+    }
+    .deck-total {
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+      font-weight: 700;
+    }
+    .ace-spec-badge {
+      background: var(--yellow);
+      color: #000;
+      font-size: 9px;
+      padding: 1px 4px;
+      border-radius: 3px;
+      margin-left: 4px;
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="nav-brand">PTCG Agent</span>
+  <div class="nav-links">
+    <a href="index.html" class="nav-link">Dashboard</a>
+    <a href="deck_builder.html" class="nav-link active">Deck Builder</a>
+    <a href="match_viewer.html" class="nav-link">Match Viewer</a>
+  </div>
+</nav>
+
+<div class="page">
+  <h1 class="page-title">Deck Builder</h1>
+
+  <div class="layout">
+    <!-- Left panel: filters + deck -->
+    <div>
+      <div class="card filters" style="margin-bottom:12px">
+        <div class="filter-label">Search</div>
+        <input type="text" id="searchInput" placeholder="Card name...">
+        <div class="filter-label">Expansion</div>
+        <select id="expansionFilter">
+          <option value="">All</option>
+          <option>DRI</option><option>MEG</option><option>ASC</option>
+          <option>WHT</option><option>BLK</option><option>TWM</option>
+          <option>SSP</option><option>PFL</option><option>JTG</option>
+          <option>TEF</option><option>SCR</option><option>SFA</option>
+          <option>PRE</option><option>POR</option><option>SVI</option>
+          <option>SVE</option>
+        </select>
+        <div class="filter-label">Category</div>
+        <select id="categoryFilter">
+          <option value="">All</option>
+          <option value="Basic Pokémon">Basic Pokémon</option>
+          <option value="Stage 1 Pokémon">Stage 1 Pokémon</option>
+          <option value="Stage 2 Pokémon">Stage 2 Pokémon</option>
+          <option value="Item">Item</option>
+          <option value="Supporter">Supporter</option>
+          <option value="Stadium">Stadium</option>
+          <option value="Pokémon Tool">Pokémon Tool</option>
+          <option value="Basic Energy">Basic Energy</option>
+          <option value="Special Energy">Special Energy</option>
+        </select>
+        <div class="filter-label">Type</div>
+        <select id="typeFilter">
+          <option value="">All</option>
+          <option value="{G}">Grass</option>
+          <option value="{R}">Fire</option>
+          <option value="{W}">Water</option>
+          <option value="{L}">Lightning</option>
+          <option value="{P}">Psychic</option>
+          <option value="{F}">Fighting</option>
+          <option value="{D}">Darkness</option>
+          <option value="{M}">Metal</option>
+          <option value="{C}">Colorless</option>
+          <option value="竜">Dragon</option>
+        </select>
+      </div>
+
+      <!-- Deck panel -->
+      <div class="card">
+        <div class="card-title">Current Deck</div>
+        <div id="deckSidebar" class="deck-sidebar"></div>
+        <div class="deck-total" id="deckTotal" style="margin-top:10px;font-size:13px">0 / 60</div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button id="saveDeckBtn" style="flex:1">Save Deck</button>
+          <button id="loadDeckBtn" class="btn-outline" style="flex:1">Load Saved</button>
+        </div>
+        <div id="deckMessage" style="font-size:11px;color:var(--text-muted);margin-top:6px"></div>
+      </div>
+    </div>
+
+    <!-- Right panel: card grid -->
+    <div>
+      <div id="cardCount" style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Loading cards...</div>
+      <div class="card-grid" id="cardGrid"></div>
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+const ACE_SPEC_IDS = new Set([10,12,13,1080,1082,1085,1088,1089,1092,1093,1095,1096,
+  1100,1104,1107,1109,1110,1111,1125,1126,1128,1155,1158,1159,1165,1167,1169,1247,1249]);
+
+let allCards = [];
+let deck = {};  // card_id → count
+
+function buildQuery() {
+  const p = new URLSearchParams();
+  const q = qs("#searchInput").value.trim();
+  const exp = qs("#expansionFilter").value;
+  const cat = qs("#categoryFilter").value;
+  const typ = qs("#typeFilter").value;
+  if (q) p.set("q", q);
+  if (exp) p.set("expansion", exp);
+  if (cat) p.set("category", cat);
+  if (typ) p.set("type", typ);
+  return p.toString() ? `?${p}` : "";
+}
+
+async function fetchCards() {
+  try {
+    const query = buildQuery();
+    const cards = await apiFetch(`/cards${query}`);
+    renderGrid(cards);
+    qs("#cardCount").textContent = `${cards.length} cards`;
+  } catch (e) {
+    qs("#cardCount").textContent = "Error loading cards — is the server running?";
+  }
+}
+
+function renderGrid(cards) {
+  const grid = qs("#cardGrid");
+  if (!cards.length) {
+    grid.innerHTML = "<div style='color:var(--text-muted);grid-column:1/-1'>No cards match your filters.</div>";
+    return;
+  }
+  grid.innerHTML = cards.map(c => {
+    const inDeck = deck[c.card_id] || 0;
+    const isAce = ACE_SPEC_IDS.has(c.card_id);
+    const badge = isAce ? '<span class="ace-spec-badge">ACE</span>' : "";
+    return `
+      <div class="pokemon-card ${inDeck ? 'in-deck' : ''}" data-id="${c.card_id}">
+        <div class="card-name">${c.name}${badge}</div>
+        <div class="card-meta">${c.expansion || "?"} · ${c.stage}</div>
+        ${c.hp ? `<div class="card-hp">${c.hp} HP ${typeBadge(c.type)}</div>` : typeBadge(c.type)}
+        <div class="card-controls">
+          <button class="btn btn-sm btn-outline" onclick="changeCount(${c.card_id}, -1)">−</button>
+          <span class="card-count" id="cnt-${c.card_id}">${inDeck}</span>
+          <button class="btn btn-sm" onclick="changeCount(${c.card_id}, 1)">+</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function changeCount(cardId, delta) {
+  const current = deck[cardId] || 0;
+  const newCount = Math.max(0, current + delta);
+  const total = deckTotal();
+  const isAce = ACE_SPEC_IDS.has(cardId);
+
+  if (delta > 0) {
+    if (total >= 60) { showToast("Deck is already at 60 cards", "error"); return; }
+    if (isAce && aceCount() >= 1) { showToast("Only 1 ACE SPEC per deck", "error"); return; }
+    if (newCount > 4) { showToast("Max 4 copies per card", "error"); return; }
+  }
+
+  if (newCount === 0) delete deck[cardId];
+  else deck[cardId] = newCount;
+
+  const el = qs(`#cnt-${cardId}`);
+  if (el) el.textContent = newCount;
+  renderDeckSidebar();
+}
+
+function deckTotal() { return Object.values(deck).reduce((a, b) => a + b, 0); }
+function aceCount() { return Object.entries(deck).filter(([id]) => ACE_SPEC_IDS.has(+id)).reduce((a, [, c]) => a + c, 0); }
+
+function renderDeckSidebar() {
+  const total = deckTotal();
+  qs("#deckTotal").textContent = `${total} / 60`;
+  qs("#deckTotal").style.color = total === 60 ? "var(--green)" : total > 60 ? "var(--red)" : "var(--text)";
+
+  const sidebar = qs("#deckSidebar");
+  if (!Object.keys(deck).length) {
+    sidebar.innerHTML = "<div style='color:var(--text-muted);font-size:12px'>Add cards from the grid.</div>";
+    return;
+  }
+  sidebar.innerHTML = Object.entries(deck).map(([id, cnt]) => {
+    const card = allCards.find(c => c.card_id === +id) || { name: `Card ${id}` };
+    return `
+      <div class="deck-entry">
+        <span class="deck-entry-name" title="${card.name}">${card.name}</span>
+        <span class="deck-count-badge">×${cnt}</span>
+      </div>
+    `;
+  }).join("");
+}
+
+qs("#saveDeckBtn").addEventListener("click", async () => {
+  const total = deckTotal();
+  if (total !== 60) { showToast(`Deck has ${total} cards — need exactly 60`, "error"); return; }
+  try {
+    await apiFetch("/deck", {
+      method: "POST",
+      body: JSON.stringify({
+        name: "my_deck",
+        cards: Object.entries(deck).map(([id, count]) => ({ card_id: +id, count })),
+      }),
+    });
+    showToast("Deck saved!");
+  } catch (e) { showToast(e.message, "error"); }
+});
+
+qs("#loadDeckBtn").addEventListener("click", async () => {
+  try {
+    const data = await apiFetch("/deck");
+    deck = {};
+    for (const entry of data.cards || []) {
+      deck[entry.card_id] = entry.count;
+    }
+    renderDeckSidebar();
+    renderGrid(allCards);
+    showToast("Deck loaded");
+  } catch (e) { showToast(e.message, "error"); }
+});
+
+const debouncedFetch = debounce(fetchCards, 300);
+qs("#searchInput").addEventListener("input", debouncedFetch);
+qs("#expansionFilter").addEventListener("change", fetchCards);
+qs("#categoryFilter").addEventListener("change", fetchCards);
+qs("#typeFilter").addEventListener("change", fetchCards);
+
+(async () => {
+  try {
+    allCards = await apiFetch("/cards");
+    renderGrid(allCards);
+    qs("#cardCount").textContent = `${allCards.length} cards`;
+  } catch {
+    qs("#cardCount").textContent = "Could not connect to API.";
+  }
+})();
+</script>
+</body>
+</html>

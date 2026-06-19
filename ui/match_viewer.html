@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PTCG Agent — Match Viewer</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    .viewer-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .turn-nav {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .turn-info {
+      font-size: 13px;
+      color: var(--text-muted);
+      min-width: 120px;
+      text-align: center;
+    }
+    .board-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .side-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+    }
+    .side-label.me   { color: var(--green); }
+    .side-label.opp  { color: var(--red); }
+    .active-pokemon {
+      background: var(--surface2);
+      border-radius: var(--radius);
+      padding: 12px;
+      margin-bottom: 8px;
+    }
+    .pmon-name { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+    .pmon-hp { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
+    .energy-pips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+    .energy-pip {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--border);
+    }
+    .prizes-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-top: 8px;
+      font-size: 12px;
+    }
+    .prize-card {
+      width: 20px; height: 28px;
+      background: var(--accent);
+      border-radius: 3px;
+      opacity: 0.8;
+    }
+    .prize-card.taken { background: var(--border); opacity: 0.3; }
+    .log-list {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .log-entry {
+      display: flex;
+      gap: 8px;
+      padding: 4px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .log-entry.current { background: var(--surface2); border-radius: 4px; padding: 4px 8px; }
+    .log-turn { color: var(--text-muted); width: 30px; flex-shrink: 0; }
+    .log-player { width: 60px; flex-shrink: 0; }
+    .log-player.a { color: var(--green); }
+    .log-player.b { color: var(--red); }
+    .log-action { color: var(--text); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="nav-brand">PTCG Agent</span>
+  <div class="nav-links">
+    <a href="index.html" class="nav-link">Dashboard</a>
+    <a href="deck_builder.html" class="nav-link">Deck Builder</a>
+    <a href="match_viewer.html" class="nav-link active">Match Viewer</a>
+  </div>
+</nav>
+
+<div class="page">
+  <!-- Viewer header -->
+  <div class="viewer-header">
+    <div>
+      <div class="page-title" id="gameTitle">Select a game log</div>
+      <div style="font-size:12px;color:var(--text-muted)" id="gameInfo">—</div>
+    </div>
+    <div class="turn-nav">
+      <button id="prevBtn" disabled>◀ Prev</button>
+      <div class="turn-info" id="turnInfo">— / —</div>
+      <button id="nextBtn" disabled>Next ▶</button>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select id="logSelect" style="min-width:160px">
+        <option value="">Load a log...</option>
+      </select>
+      <button id="loadBtn">Load</button>
+    </div>
+  </div>
+
+  <div id="mainContent" style="display:none">
+    <div class="board-layout">
+      <!-- My side -->
+      <div class="card">
+        <div class="side-label me" id="mySideLabel">My Side</div>
+        <div class="active-pokemon" id="myActive">
+          <div style="color:var(--text-muted)">No active Pokémon</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted)">Bench: <span id="myBenchCount">0</span></div>
+        <div class="prizes-row">
+          <span style="color:var(--text-muted)">Prizes:</span>
+          <div id="myPrizes"></div>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">
+          Hand: <span id="myHand">—</span> | Deck: <span id="myDeck">—</span>
+        </div>
+      </div>
+
+      <!-- Opponent side -->
+      <div class="card">
+        <div class="side-label opp">Opponent</div>
+        <div class="active-pokemon" id="oppActive">
+          <div style="color:var(--text-muted)">No active Pokémon</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted)">Bench: <span id="oppBenchCount">0</span></div>
+        <div class="prizes-row">
+          <span style="color:var(--text-muted)">Prizes:</span>
+          <div id="oppPrizes"></div>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">
+          Hand: <span id="oppHand">—</span> | Deck: <span id="oppDeck">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action scores -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">Action Scores (this decision)</div>
+      <div id="actionScores" class="bar-chart" style="margin-top:10px"></div>
+    </div>
+
+    <!-- Turn log -->
+    <div class="card">
+      <div class="card-title">Turn Log</div>
+      <div class="log-list" id="turnLog"></div>
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+let gameLog = null;
+let currentTurnIdx = 0;
+
+async function loadLogList() {
+  try {
+    const { logs } = await apiFetch("/logs");
+    const sel = qs("#logSelect");
+    sel.innerHTML = '<option value="">Select a game...</option>' +
+      logs.map(l => `<option value="${l.id}">${l.id} — ${l.winner} (${l.total_turns ?? "?"} turns)</option>`).join("");
+  } catch { /* server not running */ }
+}
+
+async function loadGame(logId) {
+  try {
+    gameLog = await apiFetch(`/logs/${logId}`);
+    currentTurnIdx = 0;
+    qs("#mainContent").style.display = "";
+    qs("#gameTitle").textContent = logId;
+    qs("#gameInfo").textContent = `Winner: ${gameLog.winner} | ${gameLog.turns?.length ?? 0} decisions`;
+    renderTurn(currentTurnIdx);
+    renderTurnLog();
+    updateNavBtns();
+  } catch (e) {
+    showToast(e.message, "error");
+  }
+}
+
+function renderTurn(idx) {
+  const turns = gameLog.turns || [];
+  const turn = turns[idx];
+  if (!turn) return;
+
+  const gs = turn.game_state;
+  const me = gs.me || {};
+  const opp = gs.opponent || {};
+  const myActive = me.active || {};
+  const oppActive = opp.active || {};
+  const currentPlayer = turn.player;
+
+  // Side labels
+  qs("#mySideLabel").textContent = currentPlayer === "agent_a" ? "Agent A (acting)" : "Agent A";
+  qs("#mySideLabel").className = "side-label me";
+
+  qs("#myActive").innerHTML = renderActivePokemon(myActive);
+  qs("#oppActive").innerHTML = renderActivePokemon(oppActive);
+  qs("#myBenchCount").textContent = (me.bench || []).length;
+  qs("#oppBenchCount").textContent = (opp.bench || []).length;
+  renderPrizes("myPrizes", me.prizes || 0);
+  renderPrizes("oppPrizes", opp.prizes || 0);
+
+  const hand = me.hand || {};
+  qs("#myHand").textContent = hand.total ?? "?";
+  qs("#myDeck").textContent = me.deck_remaining ?? "?";
+  qs("#oppHand").textContent = (opp.hand || {}).total ?? "?";
+  qs("#oppDeck").textContent = opp.deck_remaining ?? "?";
+
+  qs("#turnInfo").textContent = `Decision ${idx + 1} / ${turns.length} (Turn ${turn.turn})`;
+  renderActionScores(turn);
+}
+
+function renderActivePokemon(active) {
+  if (!active || !active.name) return '<div style="color:var(--text-muted)">No active Pokémon</div>';
+  const hpRatio = active.max_hp ? active.hp / active.max_hp : 1;
+  const hpClass = hpRatio > 0.5 ? "" : hpRatio > 0.2 ? "med" : "low";
+  const energyHtml = Object.entries(active.energy_attached || {}).map(([type, cnt]) => {
+    const cls = TYPE_CLASS[type] || "colorless";
+    return Array(cnt).fill(`<span class="energy-pip type-${cls}">${type.replace(/[{}]/g,"")}</span>`).join("");
+  }).join("");
+  const statusHtml = Object.entries(active.status || {})
+    .filter(([, v]) => v)
+    .map(([k]) => `<span style="font-size:11px;color:var(--yellow)">${k}</span>`)
+    .join(" ");
+  return `
+    <div class="pmon-name">${active.name} ${active.is_ex ? '<span style="color:var(--accent);font-size:11px">ex</span>' : ""}</div>
+    <div class="pmon-hp">${active.hp} / ${active.max_hp} HP ${typeBadge(active.type)}</div>
+    <div class="hp-bar-bg"><div class="hp-bar-fill ${hpClass}" style="width:${Math.max(0,hpRatio*100).toFixed(0)}%"></div></div>
+    ${energyHtml ? `<div class="energy-pips">${energyHtml}</div>` : ""}
+    ${statusHtml ? `<div style="margin-top:4px">${statusHtml}</div>` : ""}
+    <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Retreat: ${active.retreat_cost ?? "?"}</div>
+  `;
+}
+
+function renderPrizes(elId, remaining) {
+  const el = qs(`#${elId}`);
+  const total = 6;
+  const taken = total - remaining;
+  el.innerHTML = Array.from({length: total}, (_, i) =>
+    `<div class="prize-card ${i < taken ? 'taken' : ''}"></div>`
+  ).join("");
+}
+
+function renderActionScores(turn) {
+  const el = qs("#actionScores");
+  const actions = turn.legal_actions || [];
+  const chosen = turn.action_taken;
+  const dmgMap = (turn.game_state._action_damage) || {};
+
+  if (!actions.length) {
+    el.innerHTML = '<div style="color:var(--text-muted)">No actions</div>';
+    return;
+  }
+
+  // If model scores available, use them; otherwise show equal bars for legal actions
+  const scores = {};
+  for (const a of actions) scores[a] = 0.5;  // placeholder
+
+  const sorted = [...actions].sort((a, b) => (scores[b] || 0) - (scores[a] || 0));
+  const maxScore = Math.max(...Object.values(scores), 0.001);
+
+  el.innerHTML = sorted.map(a => {
+    const s = scores[a] || 0;
+    const pct = (s / maxScore * 100).toFixed(0);
+    const isChosen = a === chosen;
+    const dmgHint = dmgMap[a] ? ` (${dmgMap[a]} dmg)` : "";
+    return `
+      <div class="bar-row">
+        <div class="bar-label" title="${a}${dmgHint}">${isChosen ? "▶ " : ""}${a}${dmgHint}</div>
+        <div class="bar-bg">
+          <div class="bar-fill ${isChosen ? 'chosen' : ''}" style="width:${pct}%"></div>
+        </div>
+        <div class="bar-pct">${(s * 100).toFixed(0)}%</div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderTurnLog() {
+  const turns = gameLog.turns || [];
+  const el = qs("#turnLog");
+  el.innerHTML = turns.map((t, i) => `
+    <div class="log-entry ${i === currentTurnIdx ? 'current' : ''}" id="log-${i}">
+      <span class="log-turn">${t.turn}</span>
+      <span class="log-player ${t.player === 'agent_a' ? 'a' : 'b'}">${t.player}</span>
+      <span class="log-action">${t.action_taken || "—"}</span>
+      ${t.outcome !== null ? `<span style="color:${t.outcome ? 'var(--green)' : 'var(--text-muted)'}">●</span>` : ""}
+    </div>
+  `).join("");
+}
+
+function updateNavBtns() {
+  const n = (gameLog.turns || []).length;
+  qs("#prevBtn").disabled = currentTurnIdx <= 0;
+  qs("#nextBtn").disabled = currentTurnIdx >= n - 1;
+}
+
+qs("#prevBtn").addEventListener("click", () => {
+  if (currentTurnIdx > 0) {
+    currentTurnIdx--;
+    renderTurn(currentTurnIdx);
+    renderTurnLog();
+    updateNavBtns();
+    qs(`#log-${currentTurnIdx}`)?.scrollIntoView({ block: "nearest" });
+  }
+});
+
+qs("#nextBtn").addEventListener("click", () => {
+  const n = (gameLog.turns || []).length;
+  if (currentTurnIdx < n - 1) {
+    currentTurnIdx++;
+    renderTurn(currentTurnIdx);
+    renderTurnLog();
+    updateNavBtns();
+    qs(`#log-${currentTurnIdx}`)?.scrollIntoView({ block: "nearest" });
+  }
+});
+
+qs("#loadBtn").addEventListener("click", () => {
+  const id = qs("#logSelect").value;
+  if (id) loadGame(id);
+});
+
+// Auto-load from URL param
+(async () => {
+  await loadLogList();
+  const params = new URLSearchParams(location.search);
+  const logId = params.get("log");
+  if (logId) {
+    qs("#logSelect").value = logId;
+    await loadGame(logId);
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "name": "Mega Diancie ex Psychic Aggro",
+  "cards": [
+    {"card_id": 766,  "count": 4},
+    {"card_id": 687,  "count": 2},
+    {"card_id": 756,  "count": 2},
+    {"card_id": 1121, "count": 4},
+    {"card_id": 1125, "count": 1},
+    {"card_id": 1097, "count": 4},
+    {"card_id": 1094, "count": 3},
+    {"card_id": 1227, "count": 4},
+    {"card_id": 1199, "count": 3},
+    {"card_id": 1213, "count": 1},
+    {"card_id": 1182, "count": 2},
+    {"card_id": 1198, "count": 2},
+    {"card_id": 1246, "count": 2},
+    {"card_id": 5,    "count": 23},
+    {"card_id": 11,   "count": 2},
+    {"card_id": 9,    "count": 1}
+  ]
+}

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PTCG Agent — Dashboard</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav>
+  <span class="nav-brand">PTCG Agent</span>
+  <div class="nav-links">
+    <a href="index.html" class="nav-link active">Dashboard</a>
+    <a href="deck_builder.html" class="nav-link">Deck Builder</a>
+    <a href="match_viewer.html" class="nav-link">Match Viewer</a>
+  </div>
+</nav>
+
+<div class="page">
+  <h1 class="page-title">Dashboard</h1>
+
+  <!-- Status bar -->
+  <div class="status-bar" id="statusBar">
+    <div class="status-dot red" id="apiDot"></div>
+    <span id="apiStatus">Connecting to API...</span>
+    <span style="color:var(--border)">|</span>
+    <span id="modelStatus" style="color:var(--text-muted)">Model: —</span>
+    <span style="color:var(--border)">|</span>
+    <span id="cardsStatus" style="color:var(--text-muted)">Cards: —</span>
+  </div>
+
+  <!-- Stats -->
+  <div class="grid-3" style="margin-bottom:20px">
+    <div class="card">
+      <div class="card-title">Total Games</div>
+      <div class="card-value blue" id="statGames">—</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Win Rate (Agent A)</div>
+      <div class="card-value green" id="statWinRate">—</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Avg Turns / Game</div>
+      <div class="card-value yellow" id="statAvgTurns">—</div>
+    </div>
+  </div>
+
+  <div class="grid-2" style="margin-bottom:20px">
+    <!-- Feature Importance Chart -->
+    <div class="card">
+      <div class="card-title">Feature Importance (Top 10)</div>
+      <div class="bar-chart" id="featureChart" style="margin-top:8px">
+        <div style="color:var(--text-muted);font-size:12px">Train a model to see feature importances.</div>
+      </div>
+    </div>
+
+    <!-- Quick Simulate -->
+    <div class="card">
+      <div class="card-title">Run Simulation</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+        <label style="font-size:12px;color:var(--text-muted)">Games</label>
+        <input type="number" id="simGames" value="10" min="1" max="500">
+        <label style="font-size:12px;color:var(--text-muted)">Agent A</label>
+        <select id="simAgentA">
+          <option value="heuristic">Heuristic</option>
+          <option value="xgboost">XGBoost</option>
+          <option value="random">Random</option>
+        </select>
+        <label style="font-size:12px;color:var(--text-muted)">Agent B</label>
+        <select id="simAgentB">
+          <option value="random">Random</option>
+          <option value="heuristic">Heuristic</option>
+          <option value="xgboost">XGBoost</option>
+        </select>
+        <button id="simBtn">▶ Run Simulation</button>
+        <div id="simResult" style="font-size:12px;color:var(--text-muted)"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Logs -->
+  <div class="card">
+    <div class="card-title">Recent Game Logs</div>
+    <table style="margin-top:8px">
+      <thead>
+        <tr>
+          <th>Game ID</th>
+          <th>Winner</th>
+          <th>Total Turns</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="logTable">
+        <tr><td colspan="4" style="color:var(--text-muted)">No logs yet. Run a simulation first.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+async function loadStatus() {
+  try {
+    const data = await apiFetch("/");
+    qs("#apiDot").className = "status-dot green";
+    qs("#apiStatus").textContent = "API connected";
+    qs("#modelStatus").textContent = `Model: ${data.model_loaded ? "✓ loaded" : "✗ not trained"}`;
+    qs("#cardsStatus").textContent = `Cards: ${data.cards_loaded}`;
+  } catch {
+    qs("#apiStatus").textContent = "API offline — start the server";
+  }
+}
+
+async function loadStats() {
+  try {
+    const s = await apiFetch("/stats");
+    qs("#statGames").textContent = s.total_games;
+    qs("#statWinRate").textContent = s.total_games ? `${(s.win_rate * 100).toFixed(1)}%` : "—";
+    qs("#statAvgTurns").textContent = s.total_games ? s.avg_turns.toFixed(1) : "—";
+
+    if (s.feature_importance.length) {
+      renderFeatureChart(s.feature_importance.slice(0, 10));
+    }
+  } catch { /* stats endpoint may fail if no logs */ }
+}
+
+function renderFeatureChart(features) {
+  const max = Math.max(...features.map(f => f.score), 0.001);
+  const el = qs("#featureChart");
+  el.innerHTML = features.map(f => `
+    <div class="bar-row">
+      <div class="bar-label" title="${f.name}">${f.name}</div>
+      <div class="bar-bg">
+        <div class="bar-fill" style="width:${(f.score / max * 100).toFixed(1)}%"></div>
+      </div>
+      <div class="bar-pct">${(f.score * 100).toFixed(1)}%</div>
+    </div>
+  `).join("");
+}
+
+async function loadLogs() {
+  try {
+    const { logs } = await apiFetch("/logs");
+    const tbody = qs("#logTable");
+    if (!logs.length) {
+      tbody.innerHTML = "<tr><td colspan='4' style='color:var(--text-muted)'>No logs yet.</td></tr>";
+      return;
+    }
+    const recent = logs.slice(-10).reverse();
+    tbody.innerHTML = recent.map(l => `
+      <tr>
+        <td>${l.id}</td>
+        <td style="color:${l.winner === 'agent_a' ? 'var(--green)' : l.winner === 'agent_b' ? 'var(--red)' : 'var(--text-muted)'}">${l.winner}</td>
+        <td>${l.total_turns ?? "—"}</td>
+        <td><a href="match_viewer.html?log=${l.id}" class="btn btn-sm btn-outline">View</a></td>
+      </tr>
+    `).join("");
+  } catch { /* no logs */ }
+}
+
+qs("#simBtn").addEventListener("click", async () => {
+  const btn = qs("#simBtn");
+  btn.disabled = true;
+  btn.textContent = "Running...";
+  qs("#simResult").textContent = "";
+  try {
+    const res = await apiFetch("/simulate", {
+      method: "POST",
+      body: JSON.stringify({
+        num_games: parseInt(qs("#simGames").value) || 10,
+        agent_a: qs("#simAgentA").value,
+        agent_b: qs("#simAgentB").value,
+      }),
+    });
+    qs("#simResult").textContent =
+      `Done: ${res.wins_a}W / ${res.wins_b}L / ${res.draws}D (win rate: ${(res.win_rate_a * 100).toFixed(1)}%)`;
+    showToast(`Ran ${res.games_played} games`);
+    await loadStats();
+    await loadLogs();
+  } catch (e) {
+    showToast(e.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "▶ Run Simulation";
+  }
+});
+
+(async () => {
+  await loadStatus();
+  await loadStats();
+  await loadLogs();
+})();
+</script>
+</body>
+</html>

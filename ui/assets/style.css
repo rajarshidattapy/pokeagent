@@ -1,0 +1,289 @@
+:root {
+  --bg: #0f0f14;
+  --surface: #1a1a24;
+  --surface2: #22222e;
+  --border: #2a2a3a;
+  --text: #e8e8f0;
+  --text-muted: #7a7a99;
+  --accent: #6c63ff;
+  --accent-hover: #8b83ff;
+  --green: #4ade80;
+  --red: #f87171;
+  --yellow: #fbbf24;
+  --blue: #60a5fa;
+
+  --type-grass: #4ade80;
+  --type-fire: #f97316;
+  --type-water: #38bdf8;
+  --type-lightning: #fbbf24;
+  --type-psychic: #e879f9;
+  --type-fighting: #fb923c;
+  --type-darkness: #a78bfa;
+  --type-metal: #94a3b8;
+  --type-colorless: #cbd5e1;
+  --type-dragon: #60a5fa;
+  --type-any: #d1d5db;
+
+  --font: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  --radius: 8px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  min-height: 100vh;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); }
+
+/* ── Nav ─────────────────────────────────────────────────────────────────── */
+
+nav {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  height: 52px;
+}
+
+.nav-brand {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+}
+
+.nav-links { display: flex; gap: 20px; }
+.nav-link {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 4px 0;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.nav-link:hover, .nav-link.active { color: var(--text); border-color: var(--accent); }
+
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+
+.page { padding: 24px; max-width: 1400px; margin: 0 auto; }
+.page-title { font-size: 20px; font-weight: 700; margin-bottom: 20px; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+/* ── Cards (UI containers) ───────────────────────────────────────────────── */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.card-title {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.card-value {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.card-value.green { color: var(--green); }
+.card-value.yellow { color: var(--yellow); }
+.card-value.blue { color: var(--blue); }
+
+/* ── Status bar ──────────────────────────────────────────────────────────── */
+
+.status-bar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 10px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 20px;
+  font-size: 12px;
+}
+
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-dot.green { background: var(--green); }
+.status-dot.red   { background: var(--red); }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+button, .btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  font-family: var(--font);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+button:hover, .btn:hover { background: var(--accent-hover); }
+button:disabled { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
+
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.btn-outline:hover { border-color: var(--accent); color: var(--accent); background: transparent; }
+
+/* ── Inputs ──────────────────────────────────────────────────────────────── */
+
+input, select {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 7px 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input:focus, select:focus { border-color: var(--accent); }
+
+/* ── Tables ──────────────────────────────────────────────────────────────── */
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  text-align: left;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+tr:hover td { background: var(--surface2); }
+tr:last-child td { border-bottom: none; }
+
+/* ── Type badges ─────────────────────────────────────────────────────────── */
+
+.type-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #000;
+}
+.type-grass     { background: var(--type-grass); }
+.type-fire      { background: var(--type-fire); }
+.type-water     { background: var(--type-water); }
+.type-lightning { background: var(--type-lightning); }
+.type-psychic   { background: var(--type-psychic); }
+.type-fighting  { background: var(--type-fighting); }
+.type-darkness  { background: var(--type-darkness); color: #fff; }
+.type-metal     { background: var(--type-metal); }
+.type-colorless { background: var(--type-colorless); }
+.type-dragon    { background: var(--type-dragon); }
+.type-any       { background: var(--type-any); }
+
+/* ── HP bar ──────────────────────────────────────────────────────────────── */
+
+.hp-bar-bg {
+  background: var(--border);
+  border-radius: 4px;
+  height: 6px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.hp-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s;
+  background: var(--green);
+}
+.hp-bar-fill.med { background: var(--yellow); }
+.hp-bar-fill.low { background: var(--red); }
+
+/* ── Bar chart (action scores) ───────────────────────────────────────────── */
+
+.bar-chart { display: flex; flex-direction: column; gap: 6px; }
+.bar-row { display: flex; align-items: center; gap: 8px; }
+.bar-label { width: 180px; font-size: 12px; color: var(--text-muted); flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-bg { flex: 1; background: var(--border); border-radius: 4px; height: 20px; overflow: hidden; }
+.bar-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.3s; }
+.bar-fill.chosen { background: var(--green); }
+.bar-pct { width: 40px; text-align: right; font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
+
+/* ── Card grid (deck builder) ────────────────────────────────────────────── */
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.pokemon-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: border-color 0.15s;
+}
+.pokemon-card:hover { border-color: var(--accent); }
+.pokemon-card.in-deck { border-color: var(--accent); background: var(--surface2); }
+
+.pokemon-card .card-name { font-size: 12px; font-weight: 700; line-height: 1.3; }
+.pokemon-card .card-meta { font-size: 11px; color: var(--text-muted); }
+.pokemon-card .card-hp { font-size: 13px; color: var(--green); }
+
+.card-controls { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.card-count { font-size: 13px; font-weight: 700; width: 20px; text-align: center; }
+
+/* ── Toast ───────────────────────────────────────────────────────────────── */
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  padding: 12px 20px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  z-index: 1000;
+  animation: slide-in 0.2s ease;
+}
+.toast-success { background: var(--green); color: #000; }
+.toast-error   { background: var(--red); color: #fff; }
+
+@keyframes slide-in {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .page { padding: 16px; }
+}
